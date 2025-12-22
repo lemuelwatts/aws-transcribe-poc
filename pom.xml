@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Copyright 2025 Booz Allen Hamilton.
+
+    Booz Allen Hamilton Confidential Information.
+
+    The contents of this file are the intellectual property of
+    Booz Allen Hamilton, Inc. ("BAH") and are subject to copyright protection
+    under the laws of the United States and other countries.
+
+    You acknowledge that misappropriation, misuse, or redistribution of content
+    on the file could cause irreparable harm to BAH and/or to third parties.
+
+    You may not copy, reproduce, distribute, publish, display, execute, modify,
+    create derivative works of, transmit, sell or offer for resale, or in any way
+    exploit any part of this code or program without BAH's express written permission.
+
+    The contents of this code or program contains code
+    that is itself or was created using artificial intelligence.
+
+    To the best of our knowledge, this code does not infringe third-party intellectual
+    property rights, contain errors, inaccuracies, bias, or security concerns.
+
+    However, Booz Allen does not warrant, claim, or provide any implied
+    or express warranty for the aforementioned, nor of merchantability
+    or fitness for purpose.
+
+    Booz Allen expressly limits liability, whether by contract, tort or in equity
+    for any damage or harm caused by use of this artificial intelligence code or program.
+
+    Booz Allen is providing this code or program "as is" with the understanding
+    that any separately negotiated standards of performance for said code
+    or program will be met for the duration of any applicable contract under which
+    the code or program is provided.
+
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.boozallen.aws-transcribe-poc</groupId>
+    <artifactId>aws-transcribe-poc-root</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>AWS-TRANSCRIBE-POC</name>
+    <description>AWS-TRANSCRIBE-POC project</description>
+
+    <modules>
+        <module>backend</module>
+    </modules>
+
+    <properties>
+        <version.maven.compiler.plugin>3.14.0</version.maven.compiler.plugin>
+        <version.maven.deploy.plugin>3.1.4</version.maven.deploy.plugin>
+        <version.maven.install.plugin>3.1.4</version.maven.install.plugin>
+        <version.maven.jar.plugin>3.4.2</version.maven.jar.plugin>
+        <version.maven.surefire.plugin>3.5.2</version.maven.surefire.plugin>
+        <version.maven.resources.plugin>3.3.1</version.maven.resources.plugin>
+        <version.maven.clean.plugin>3.4.1</version.maven.clean.plugin>
+        <version.maven.exec.plugin>3.5.1</version.maven.exec.plugin>
+
+        <version.habushu.plugin>3.0.0</version.habushu.plugin>
+
+        <!-- io.fabric8:docker-maven-plugin -->
+        <version.fabric8.docker.maven.plugin>0.45-tb-0.1.0</version.fabric8.docker.maven.plugin>
+        <docker.platforms>linux/amd64,linux/arm64</docker.platforms>
+        <!-- Used for switching between forked and original helm repo-->
+        <group.fabric8.plugin>org.technologybrewery.fabric8</group.fabric8.plugin>
+        <docker.repo.id />
+        <docker.image.name />
+        <docker.image.version>${project.version}</docker.image.version>
+    </properties>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.technologybrewery.habushu</groupId>
+                    <artifactId>habushu-maven-plugin</artifactId>
+                    <version>${version.habushu.plugin}</version>
+                    <extensions>true</extensions>
+                    <configuration>
+                        <pythonVersion>3.12.8</pythonVersion>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-clean-plugin</artifactId>
+                    <version>${version.maven.clean.plugin}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${version.maven.compiler.plugin}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${version.maven.deploy.plugin}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-install-plugin</artifactId>
+                    <version>${version.maven.install.plugin}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${version.maven.jar.plugin}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${version.maven.surefire.plugin}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-resources-plugin</artifactId>
+                    <version>${version.maven.resources.plugin}</version>
+                </plugin>
+                <plugin>
+                    <!--
+                        NB: using a temporary fork of the docker-maven-plugin for faster local builds.
+                        This can be removed once https://github.com/fabric8io/docker-maven-plugin/issues/1804
+                        is incorporated into the io.fabric8 plugin directly.
+                      -->
+                    <groupId>${group.fabric8.plugin}</groupId>
+                    <artifactId>docker-maven-plugin</artifactId>
+                    <version>${version.fabric8.docker.maven.plugin}</version>
+                    <extensions>true</extensions>
+                    <executions>
+                        <execution>
+                            <id>docker-build</id>
+                            <phase>install</phase>
+                            <goals>
+                                <goal>build</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>default-push</id>
+                            <phase>deploy</phase>
+                            <goals>
+                                <goal>push</goal>
+                            </goals>
+                            <configuration>
+                                <images>
+                                    <image>
+                                        <build>
+                                            <buildx>
+                                                <builderName>maven</builderName>
+                                                <driverOpts>
+                                                    <!-- Fully qualify build driver image name to
+                                                    ensure any configured credentials are used -->
+                                                    <image>docker.io/moby/buildkit:v0.19.0</image>
+                                                </driverOpts>
+                                                <!-- When performing multi-platform builds on k8s
+                                                driver with local external cache, some ADD/COPY
+                                                layers end up with
+                                                     colliding hashes between the two architectures. This results in a cache export error that should be
+                                                ignored. -->
+                                                <cacheTo>
+                                                    type=local,dest=${user.home}/.docker/cache,ignore-error=true</cacheTo>
+                                                <cacheFrom>type=local,src=${user.home}/.docker/cache</cacheFrom>
+                                            </buildx>
+                                        </build>
+                                    </image>
+                                </images>
+                            </configuration>
+                        </execution>
+                    </executions>
+                    <configuration>
+                        <images>
+                            <image>
+                                <name>${docker.repo.id}${docker.image.name}:${docker.image.version}</name>
+                                <build>
+                                    <buildx>
+                                        <builderName>default</builderName>
+                                        <!-- use a separate state dir to ensure pre-configured
+                                        credentials are not deleted -->
+                                        <dockerStateDir>~/.docker/fabric8</dockerStateDir>
+                                        <platforms>
+                                            <platform>${docker.platforms}</platform>
+                                        </platforms>
+                                    </buildx>
+                                    <contextDir>${project.basedir}</contextDir>
+                                    <dockerFile>./Dockerfile</dockerFile>
+                                </build>
+                            </image>
+                        </images>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${version.maven.exec.plugin}</version>
+                <configuration>
+                    <!--
+                    successCode = 1 means files were changed.
+                    successCode = 0 means no file were changed.
+                    -->
+                    <successCodes>
+                        <successCode>0</successCode>
+                        <successCode>1</successCode>
+                    </successCodes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>hawkeye-format</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>hawkeye</executable>
+                            <arguments>
+                                <argument>format</argument>
+                            </arguments>
+                        </configuration>
+                        <inherited>false</inherited>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <!--
+                        This plugin rule enforces uv version and will cause the build to fail explicitly if uv is not
+                        installed
+                     -->
+                    <execution>
+                        <id>enforce-uv</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireUvVersion>
+                                    <version>>=0.6.0</version>
+                                </requireUvVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.technologybrewery.habushu</groupId>
+                        <artifactId>habushu-maven-plugin</artifactId>
+                        <version>${version.habushu.plugin}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+        </plugins>
+    </build>
+</project>

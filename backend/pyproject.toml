@@ -1,0 +1,140 @@
+# Copyright 2025 Booz Allen Hamilton.
+#
+# Booz Allen Hamilton Confidential Information.
+#
+# The contents of this file are the intellectual property of
+# Booz Allen Hamilton, Inc. ("BAH") and are subject to copyright protection
+# under the laws of the United States and other countries.
+#
+# You acknowledge that misappropriation, misuse, or redistribution of content
+# on the file could cause irreparable harm to BAH and/or to third parties.
+#
+# You may not copy, reproduce, distribute, publish, display, execute, modify,
+# create derivative works of, transmit, sell or offer for resale, or in any way
+# exploit any part of this code or program without BAH's express written permission.
+#
+# The contents of this code or program contains code
+# that is itself or was created using artificial intelligence.
+#
+# To the best of our knowledge, this code does not infringe third-party intellectual
+# property rights, contain errors, inaccuracies, bias, or security concerns.
+#
+# However, Booz Allen does not warrant, claim, or provide any implied
+# or express warranty for the aforementioned, nor of merchantability
+# or fitness for purpose.
+#
+# Booz Allen expressly limits liability, whether by contract, tort or in equity
+# for any damage or harm caused by use of this artificial intelligence code or program.
+#
+# Booz Allen is providing this code or program "as is" with the understanding
+# that any separately negotiated standards of performance for said code
+# or program will be met for the duration of any applicable contract under which
+# the code or program is provided.
+
+[project]
+name = "aws-transcribe-poc"
+version = "0.0.1.dev"
+description = "Someone generated the project without updating the description."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1.7",
+    "fastapi[standard]>=0.116.1",
+    "requests>=2.32.3",
+    "uvicorn>=0.32.0",
+    "behave>=1.2.6",
+    "boto3>=1.35.0",
+]
+
+[project.scripts]
+aws_transcribe_poc = "aws_transcribe_poc.__main__:aws_transcribe_poc"
+
+[tool.uv]
+dev-dependencies = [
+    "ipykernel>=6.29.5",
+    "ipython>=8.29.0",
+    "pytest>=8.3.3",
+    "ruff>=0.11.7",
+]
+package = true
+
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+
+fix = true
+show-fixes = true
+
+[tool.ruff.lint]
+select = [
+    "S",   # Flake8-bandit
+    "ANN", # Type Annotations
+    "ARG", # unused args
+    "B",   # flake8-bugbear
+    "D",   # pydocstyle
+    "E",   # pycodestyle - errors
+    "F",   # Pyflakes
+    "FBT", # Boolean traps; https://pypi.org/project/flake8-boolean-trap/
+    "I",   # isort
+    "N",   # PEP8 Naming Conventions
+    "PGH", # PyGrepHooks
+    "PIE", # https://beta.ruff.rs/docs/rules/#flake8-pie-pie
+    "PTH", # flake8-use-pathlib
+    "RUF", # Ruff-specific rules
+    "SIM", # flake8-simplify
+    "TCH", # Type-checking linter; for common mistake relates to type-checking imports.
+    "UP",  # pyupgrade
+    "W",   # pycodestyle - warnings
+]
+
+ignore = [
+    "ANN002", # missing-type-args
+    "ANN003", # missing-type-kwargs
+    "ANN204", # missing-return-type-special-method
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**/*.py" = [
+    "S101",   # asserts allowed in tests...
+    "S311",   # Standard pseudo-random generators are not suitable for cryptographic purposes
+    "ANN",    # Don't care about missing type annotations in tests
+    "ARG001", # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",    # Don't care about booleans as positional arguments in tests, e.g. via @pytest.mark.parametrize()
+]
+
+"conftest.py" = [
+    "ARG001", # Allow un-used function args in conftest.py b'c fixtures.
+]
+
+# Marimo notebook specific rule ignores.
+"notebooks/**/*.py" = [
+    "N807",   # dunder names re: cells.
+    "ANN202", # missing return types re: cells.
+    "ANN001", # missing type annotations re: cells.
+    "B018",   # Related to displaying notebook values.
+]
+
+[tool.ruff.lint.isort]
+# ruff/isort are detecting first-party most of the time correctly.
+# Set this explicitly if needed.
+known-first-party = ["aws_transcribe_poc"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pyupgrade]
+# see: https://docs.astral.sh/ruff/settings/#lint_pyupgrade_keep-runtime-typing
+# Preserve types, even if a file imports `from __future__ import annotations`.
+keep-runtime-typing = true
+
+[dependency-groups]
+dev = [
+    "kappa-maki>=1.0.2",
+]
+
+
+# Added by habushu-maven-plugin at 2025-12-19T14:29:38.820265 to use https://pypi.org/simple/ as source repository for installing dependencies
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+publish-url = "https://pypi.org/simple/"
