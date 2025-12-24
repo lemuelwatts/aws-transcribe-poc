@@ -33,7 +33,9 @@
 
 """AWS Transcribe service for transcription of media files in S3."""
 
+import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -49,6 +51,7 @@ class TranscriptionResult:
     s3_uri: str
     success: bool
     s3_output_uri: str | None = None
+    s3_summary_uri: str | None = None
     error: str | None = None
 
 
@@ -59,8 +62,10 @@ class TranscriptionService:
         """Initialize the transcription service."""
         self.region = os.environ.get("AWS_REGION", "us-east-1")
 
-        # Initialize AWS Transcribe client
+        # Initialize AWS clients
         self.transcribe_client = boto3.client("transcribe", region_name=self.region)
+        self.s3_client = boto3.client("s3", region_name=self.region)
+        self.bedrock_client = boto3.client("bedrock-runtime", region_name=self.region)
 
     def _parse_s3_uri(self, s3_uri: str) -> tuple[str, str]:
         """Parse an S3 URI into bucket and key components.
@@ -77,6 +82,23 @@ class TranscriptionService:
         bucket = parts[0]
         key = parts[1] if len(parts) > 1 else ""
         return bucket, key
+
+    def _sanitize_job_name(self, name: str) -> str:
+        """Sanitize a string for use as AWS Transcribe job name.
+
+        Job names must match pattern: ^[0-9a-zA-Z._-]+
+
+        Args:
+            name: The raw name to sanitize.
+
+        Returns:
+            Sanitized name with only allowed characters.
+        """
+        # Replace spaces with underscores
+        sanitized = name.replace(" ", "_")
+        # Remove any characters that aren't alphanumeric, dot, underscore, or hyphen
+        sanitized = re.sub(r"[^0-9a-zA-Z._-]", "", sanitized)
+        return sanitized
 
     def _start_job(self, s3_uri: str, job_name: str) -> str:
         """Start an AWS Transcribe job.
@@ -134,14 +156,90 @@ class TranscriptionService:
 
             time.sleep(poll_interval)
 
+    def _get_transcript_text(self, bucket: str, key: str) -> str:
+        """Download transcription JSON from S3 and extract the transcript text.
+
+        Args:
+            bucket: S3 bucket name.
+            key: S3 object key for the transcription JSON.
+
+        Returns:
+            The transcript text.
+        """
+        response = self.s3_client.get_object(Bucket=bucket, Key=key)
+        transcription_data = json.loads(response["Body"].read().decode("utf-8"))
+
+        # AWS Transcribe JSON: results.transcripts[0].transcript
+        return transcription_data["results"]["transcripts"][0]["transcript"]
+
+    def _summarize_text(self, text: str) -> str:
+        """Summarize text using AWS Bedrock with Amazon Titan.
+
+        Args:
+            text: The text to summarize.
+
+        Returns:
+            The summarized text.
+        """
+        prompt = (
+            "You are an expert meeting summarizer. Analyze the following "
+            "transcript and provide a structured summary with two sections:\n\n"
+            "## Summary\n"
+            "Write a concise paragraph summarizing the key points, main topics "
+            "discussed, decisions made, and any important conclusions.\n\n"
+            "## Action Items\n"
+            "List all action items, tasks, or follow-ups mentioned in the "
+            "meeting as a bulleted list. For each item, include who is "
+            "responsible (if mentioned) and any deadlines. If no action items "
+            "were discussed, write 'No action items identified.'\n\n"
+            "---\n\n"
+            f"Transcript:\n{text}\n\n"
+        )
+
+        model_id = os.environ.get("BEDROCK_MODEL_ID", "amazon.titan-text-express-v1")
+
+        request_body = {
+            "inputText": prompt,
+            "textGenerationConfig": {
+                "maxTokenCount": 4096,
+                "temperature": 0.3,
+                "topP": 0.9,
+            },
+        }
+
+        response = self.bedrock_client.invoke_model(
+            modelId=model_id,
+            body=json.dumps(request_body),
+            contentType="application/json",
+            accept="application/json",
+        )
+
+        response_body = json.loads(response["body"].read())
+        return response_body["results"][0]["outputText"]
+
+    def _upload_summary(self, bucket: str, key: str, summary: str) -> None:
+        """Upload summary text to S3.
+
+        Args:
+            bucket: S3 bucket name.
+            key: S3 object key for the summary file.
+            summary: The summary text to upload.
+        """
+        self.s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=summary.encode("utf-8"),
+            ContentType="text/plain",
+        )
+
     def transcribe_s3_file(self, s3_uri: str) -> TranscriptionResult:
-        """Transcribe a media file from S3.
+        """Transcribe a media file from S3 and generate a summary.
 
         Args:
             s3_uri: S3 URI of the media file (e.g., s3://bucket/key.mp4).
 
         Returns:
-            TranscriptionResult with status and output path.
+            TranscriptionResult with status, output path, and summary path.
         """
         try:
             # Extract filename for job name
@@ -149,12 +247,16 @@ class TranscriptionService:
             filename = key.split("/")[-1]
             file_stem = Path(filename).stem
 
-            # Compute S3 output URI (JSON file in output/ folder)
-            s3_output_uri = f"s3://{bucket}/output/{file_stem}_transcription.json"
+            # Compute S3 output URIs
+            transcription_key = f"output/{file_stem}_transcription.json"
+            summary_key = f"output/{file_stem}_summary.txt"
+            s3_output_uri = f"s3://{bucket}/{transcription_key}"
+            s3_summary_uri = f"s3://{bucket}/{summary_key}"
 
             # Generate unique job name with timestamp (MMDDYYYYHHmmss)
             timestamp = datetime.now().strftime("%m%d%Y%H%M%S")
-            job_name = f"transcribe-{file_stem}-{timestamp}"
+            sanitized_stem = self._sanitize_job_name(file_stem)
+            job_name = f"transcribe-{sanitized_stem}-{timestamp}"
 
             # Start transcription job
             self._start_job(s3_uri, job_name)
@@ -162,10 +264,18 @@ class TranscriptionService:
             # Wait for completion
             self.poll_job_status(job_name)
 
+            # Get transcript text and generate summary
+            transcript_text = self._get_transcript_text(bucket, transcription_key)
+            summary = self._summarize_text(transcript_text)
+
+            # Upload summary to S3
+            self._upload_summary(bucket, summary_key, summary)
+
             return TranscriptionResult(
                 s3_uri=s3_uri,
                 success=True,
                 s3_output_uri=s3_output_uri,
+                s3_summary_uri=s3_summary_uri,
             )
 
         except Exception as e:

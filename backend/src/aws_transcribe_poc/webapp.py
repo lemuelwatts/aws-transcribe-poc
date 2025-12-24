@@ -68,6 +68,7 @@ class TranscriptionResultModel(BaseModel):
     s3_uri: str
     success: bool
     s3_output_uri: str | None = None
+    s3_summary_uri: str | None = None
     error: str | None = None
 
 
@@ -112,6 +113,7 @@ async def transcribe_files(
             s3_uri=r.s3_uri,
             success=r.success,
             s3_output_uri=r.s3_output_uri,
+            s3_summary_uri=r.s3_summary_uri,
             error=r.error,
         )
         for r in results
