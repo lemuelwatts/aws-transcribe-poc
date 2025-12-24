@@ -52,6 +52,9 @@ class TranscriptionResult:
     success: bool
     s3_output_uri: str | None = None
     s3_summary_uri: str | None = None
+    transcription_duration_seconds: float | None = None
+    summary_duration_seconds: float | None = None
+    total_duration_seconds: float | None = None
     error: str | None = None
 
 
@@ -182,18 +185,44 @@ class TranscriptionService:
             The summarized text.
         """
         prompt = (
-            "You are an expert meeting summarizer. Analyze the following "
-            "transcript and provide a structured summary with two sections:\n\n"
+            "You are an expert meeting summarizer. You MUST produce a summary with "
+            "EXACTLY TWO REQUIRED SECTIONS: 'Summary' and 'Action Items'. "
+            "These sections are MANDATORY and must ALWAYS be included "
+            "with NO EXCEPTIONS.\n\n"
+            "REQUIRED OUTPUT FORMAT:\n"
+            "Your response must contain both sections below in "
+            "this exact structure:\n\n"
             "## Summary\n"
-            "Write a concise paragraph summarizing the key points, main topics "
-            "discussed, decisions made, and any important conclusions.\n\n"
+            "[Your summary content here]\n\n"
             "## Action Items\n"
-            "List all action items, tasks, or follow-ups mentioned in the "
-            "meeting as a bulleted list. For each item, include who is "
-            "responsible (if mentioned) and any deadlines. If no action items "
-            "were discussed, write 'No action items identified.'\n\n"
+            "[Your action items content here]\n\n"
+            "---\n\n"
+            "SECTION 1 - SUMMARY (REQUIRED - MUST BE INCLUDED):\n"
+            "Write a clear and concise paragraph that captures:\n"
+            "- Key topics discussed\n"
+            "- Main points raised\n"
+            "- Decisions made\n"
+            "- Notable conclusions\n"
+            "Use complete sentences and professional language. Base your summary "
+            "ONLY on information explicitly mentioned in the transcript.\n\n"
+            "SECTION 2 - ACTION ITEMS (REQUIRED - MUST BE INCLUDED):\n"
+            "Create a comprehensive bulleted list of all action items. For each item:\n"
+            "- State the task clearly\n"
+            "- Identify who is responsible (or write 'No assignee identified')\n"
+            "- Include deadlines/timeframes (or write 'No deadline provided')\n\n"
+            "If there are truly no action items in the meeting, you MUST still include "
+            "the 'Action Items' section header and write: "
+            "'No action items identified.'\n\n"
+            "CRITICAL REQUIREMENTS:\n"
+            "- Both sections (Summary AND Action Items) are MANDATORY\n"
+            "- NEVER omit either section for any reason\n"
+            "- Base content solely on the transcript provided\n"
+            "- Maintain a neutral, professional tone\n"
+            "- Do not invent or assume information not in the transcript\n\n"
             "---\n\n"
             f"Transcript:\n{text}\n\n"
+            "Remember: Your response MUST include both the Summary section and the "
+            "Action Items section. Do not skip either one."
         )
 
         model_id = os.environ.get("BEDROCK_MODEL_ID", "amazon.titan-text-express-v1")
@@ -241,6 +270,8 @@ class TranscriptionService:
         Returns:
             TranscriptionResult with status, output path, and summary path.
         """
+        total_start = time.time()
+
         try:
             # Extract filename for job name
             bucket, key = self._parse_s3_uri(s3_uri)
@@ -258,31 +289,38 @@ class TranscriptionService:
             sanitized_stem = self._sanitize_job_name(file_stem)
             job_name = f"transcribe-{sanitized_stem}-{timestamp}"
 
-            # Start transcription job
+            # Start transcription job and track duration
+            transcription_start = time.time()
             self._start_job(s3_uri, job_name)
-
-            # Wait for completion
             self.poll_job_status(job_name)
+            transcription_duration = time.time() - transcription_start
 
-            # Get transcript text and generate summary
+            # Get transcript text and generate summary, track duration
+            summary_start = time.time()
             transcript_text = self._get_transcript_text(bucket, transcription_key)
             summary = self._summarize_text(transcript_text)
-
-            # Upload summary to S3
             self._upload_summary(bucket, summary_key, summary)
+            summary_duration = time.time() - summary_start
+
+            total_duration = time.time() - total_start
 
             return TranscriptionResult(
                 s3_uri=s3_uri,
                 success=True,
                 s3_output_uri=s3_output_uri,
                 s3_summary_uri=s3_summary_uri,
+                transcription_duration_seconds=round(transcription_duration, 2),
+                summary_duration_seconds=round(summary_duration, 2),
+                total_duration_seconds=round(total_duration, 2),
             )
 
         except Exception as e:
+            total_duration = time.time() - total_start
             return TranscriptionResult(
                 s3_uri=s3_uri,
                 success=False,
                 error=str(e),
+                total_duration_seconds=round(total_duration, 2),
             )
 
     def transcribe_all(self, s3_uris: list[str]) -> list[TranscriptionResult]:
