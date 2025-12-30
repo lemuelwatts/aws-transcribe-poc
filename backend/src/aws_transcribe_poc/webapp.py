@@ -60,6 +60,7 @@ class TranscriptionRequestModel(BaseModel):
     """Request model for batch transcription."""
 
     s3_uris: list[str]
+    save_metrics: bool = False
 
 
 class TranscriptionResultModel(BaseModel):
@@ -69,6 +70,7 @@ class TranscriptionResultModel(BaseModel):
     success: bool
     s3_output_uri: str | None = None
     s3_summary_uri: str | None = None
+    s3_metrics_uri: str | None = None
     transcription_duration_seconds: float | None = None
     summary_duration_seconds: float | None = None
     total_duration_seconds: float | None = None
@@ -101,6 +103,8 @@ async def transcribe_files(
 
     Args:
         request: Request containing list of S3 URIs to transcribe.
+            - s3_uris: List of S3 URIs to transcribe.
+            - save_metrics: Whether to save metrics JSON to S3 (default: false).
 
     Requires environment variables:
     - AWS_REGION: AWS region (default: us-east-1)
@@ -109,7 +113,9 @@ async def transcribe_files(
         TranscriptionResponseModel with summary and individual file results.
     """
     transcription_service = TranscriptionService()
-    results = transcription_service.transcribe_all(request.s3_uris)
+    results = transcription_service.transcribe_all(
+        request.s3_uris, save_metrics=request.save_metrics
+    )
 
     result_models = [
         TranscriptionResultModel(
@@ -117,6 +123,7 @@ async def transcribe_files(
             success=r.success,
             s3_output_uri=r.s3_output_uri,
             s3_summary_uri=r.s3_summary_uri,
+            s3_metrics_uri=r.s3_metrics_uri,
             transcription_duration_seconds=r.transcription_duration_seconds,
             summary_duration_seconds=r.summary_duration_seconds,
             total_duration_seconds=r.total_duration_seconds,

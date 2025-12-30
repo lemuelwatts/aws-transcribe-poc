@@ -52,6 +52,7 @@ class TranscriptionResult:
     success: bool
     s3_output_uri: str | None = None
     s3_summary_uri: str | None = None
+    s3_metrics_uri: str | None = None
     transcription_duration_seconds: float | None = None
     summary_duration_seconds: float | None = None
     total_duration_seconds: float | None = None
@@ -261,11 +262,29 @@ class TranscriptionService:
             ContentType="text/plain",
         )
 
-    def transcribe_s3_file(self, s3_uri: str) -> TranscriptionResult:
+    def _upload_metrics(self, bucket: str, key: str, metrics: dict) -> None:
+        """Upload metrics JSON to S3.
+
+        Args:
+            bucket: S3 bucket name.
+            key: S3 object key for the metrics file.
+            metrics: The metrics dictionary to upload.
+        """
+        self.s3_client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=json.dumps(metrics, indent=2).encode("utf-8"),
+            ContentType="application/json",
+        )
+
+    def transcribe_s3_file(
+        self, s3_uri: str, *, save_metrics: bool = False
+    ) -> TranscriptionResult:
         """Transcribe a media file from S3 and generate a summary.
 
         Args:
             s3_uri: S3 URI of the media file (e.g., s3://bucket/key.mp4).
+            save_metrics: Whether to save metrics JSON to S3 (default: False).
 
         Returns:
             TranscriptionResult with status, output path, and summary path.
@@ -284,8 +303,8 @@ class TranscriptionService:
             s3_output_uri = f"s3://{bucket}/{transcription_key}"
             s3_summary_uri = f"s3://{bucket}/{summary_key}"
 
-            # Generate unique job name with timestamp (MMDDYYYYHHmmss)
-            timestamp = datetime.now().strftime("%m%d%Y%H%M%S")
+            # Generate unique job name with timestamp (YYYYMMDDHHmmss)
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             sanitized_stem = self._sanitize_job_name(file_stem)
             job_name = f"transcribe-{sanitized_stem}-{timestamp}"
 
@@ -304,15 +323,44 @@ class TranscriptionService:
 
             total_duration = time.time() - total_start
 
-            return TranscriptionResult(
+            # Compute metrics key with completion timestamp
+            completion_timestamp = datetime.now()
+            completion_timestamp_str = completion_timestamp.strftime("%Y%m%d%H%M%S")
+            metrics_key = (
+                f"output/metrics/{file_stem}_metrics_{completion_timestamp_str}.json"
+            )
+            s3_metrics_uri = f"s3://{bucket}/{metrics_key}" if save_metrics else None
+
+            result = TranscriptionResult(
                 s3_uri=s3_uri,
                 success=True,
                 s3_output_uri=s3_output_uri,
                 s3_summary_uri=s3_summary_uri,
+                s3_metrics_uri=s3_metrics_uri,
                 transcription_duration_seconds=round(transcription_duration, 2),
                 summary_duration_seconds=round(summary_duration, 2),
                 total_duration_seconds=round(total_duration, 2),
             )
+
+            # Upload metrics if enabled
+            if save_metrics:
+                metrics = {
+                    "completed_at": completion_timestamp.isoformat(),
+                    "s3_uri": result.s3_uri,
+                    "success": result.success,
+                    "s3_output_uri": result.s3_output_uri,
+                    "s3_summary_uri": result.s3_summary_uri,
+                    "s3_metrics_uri": result.s3_metrics_uri,
+                    "transcription_duration_seconds": (
+                        result.transcription_duration_seconds
+                    ),
+                    "summary_duration_seconds": result.summary_duration_seconds,
+                    "total_duration_seconds": result.total_duration_seconds,
+                    "error": result.error,
+                }
+                self._upload_metrics(bucket, metrics_key, metrics)
+
+            return result
 
         except Exception as e:
             total_duration = time.time() - total_start
@@ -323,11 +371,14 @@ class TranscriptionService:
                 total_duration_seconds=round(total_duration, 2),
             )
 
-    def transcribe_all(self, s3_uris: list[str]) -> list[TranscriptionResult]:
+    def transcribe_all(
+        self, s3_uris: list[str], *, save_metrics: bool = False
+    ) -> list[TranscriptionResult]:
         """Transcribe multiple media files from S3.
 
         Args:
             s3_uris: List of S3 URIs to transcribe.
+            save_metrics: Whether to save metrics JSON to S3 (default: False).
 
         Returns:
             List of TranscriptionResult for each file processed.
@@ -335,7 +386,7 @@ class TranscriptionService:
         results = []
 
         for s3_uri in s3_uris:
-            result = self.transcribe_s3_file(s3_uri)
+            result = self.transcribe_s3_file(s3_uri, save_metrics=save_metrics)
             results.append(result)
 
         return results
