@@ -40,6 +40,7 @@ to the rest of the "backend".
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
+from .routers.audio import router as audio_router
 
 from .services.transcribe import TranscriptionService
 
@@ -49,6 +50,7 @@ app = FastAPI(
     version="0.0.1",
 )
 
+app.include_router(audio_router)
 
 class MyResponseModel(BaseModel):
     """Response model for greeting."""
