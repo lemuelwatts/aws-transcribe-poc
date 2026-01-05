@@ -41,9 +41,9 @@ services:
       # If things seem to not be working, make sure you don't have something else
       # running on host port 8000 already.
       - 8000:80
-    # environment:
-    #   # configure environment variables for the container.
-    #   # The below is not used at the moment; it's an example only.
-    #   # BACKEND_PORT: 8000
-    #   # BACKEND_HOST: 0.0.0.0
-
+    environment:
+      # Pass AWS credentials from host environment to container
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
+      AWS_REGION: us-east-1

@@ -266,3 +266,6 @@ docker-compose.override.yml
 !frontend/lib
 # Ignore built files
 target/
+
+
+docs/
