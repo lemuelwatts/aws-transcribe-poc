@@ -101,7 +101,7 @@ class InputHandler():
 
         logger.info(f'metrics saved to {metrics_path}')
 
-    def process_input(self, input: str, original_filename: str) -> tuple[str, dict]:
+    def process_input(self, input_file_path: str, original_filename: str) -> tuple[str, dict]:
         """This function ensures the file is in .wav format and gets a uri from the s3
             bucket so that we can pass a uri to the aws transcribe function.
 
@@ -113,11 +113,11 @@ class InputHandler():
         wav_filepath = None
         try:
             # check if input extension is in acceptable types
-            self._check_file_extension(input)
+            self._check_file_extension(input_file_path)
 
-            input_metadata = self._probe_file(file_path=input)
+            input_metadata = self._probe_file(file_path=input_file_path)
 
-            wav_filepath, ffmpeg_metrics = self._ensure_wav(input)
+            wav_filepath, ffmpeg_metrics = self._ensure_wav(input_file_path)
             
             s3_uri, s3_metrics = self.s3_handler.upload_file(file_path=wav_filepath, original_filename=original_filename)
 
