@@ -116,6 +116,16 @@ class ResponseModel(BaseModel):
     total_pipeline_duration_seconds: float
 
 
+class BatchResponseModel(BaseModel):
+    """Response model for batch end-to-end pipeline."""
+
+    total_files: int
+    successful: int
+    failed: int
+    total_pipeline_duration: float
+    results: list[ResponseModel]    # collect processing metrics for each file
+
+
 @app.get("/", response_model=MyResponseModel)
 async def root() -> MyResponseModel:
     """Root endpoint."""
@@ -171,11 +181,12 @@ async def transcribe_files(
         results=result_models,
     )
 
+
 @app.post('/upload_and_transcribe', response_model=ResponseModel)
 async def upload_and_transcribe(
     file: UploadFile = File(...),
     save_metrics: bool = False
-):
+)-> ResponseModel:
     """ End to end pipeline: upload, process, convert to WAV, upload to s3, and transcribe."""
 
     pipeline_start = time.time()
@@ -227,6 +238,88 @@ async def upload_and_transcribe(
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+
+@app.post('/upload_and_transcribe_batch', response_model=BatchResponseModel)
+async def upload_and_transcribe_batch(
+    files: list[UploadFile] = File(...),
+    save_metrics: bool = False
+) -> BatchResponseModel:
+    """ End to end pipeline for multiple files: upload, process, convert to WAV, upload to s3, and transcribe."""
+
+    pipeline_start = time.time()
+    tmp_paths = []
+    file_results = []
+
+
+    try:
+        handler = InputHandler()
+
+        s3_uris = []
+        audio_processing_metrics = []
+
+        for file in files:        
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+                content = await file.read()
+                tmp.write(content)
+                tmp_paths.append(tmp.name)
+
+                s3_uri, audio_metrics = handler.process_input(tmp.name, file.filename)
+                s3_uris.append(s3_uri)
+                
+                audio_processing_metrics.append(
+                    {
+                        'filename': file.filename,
+                        's3_uri': s3_uri,
+                        'metrics': audio_metrics
+                    }
+                )
+
+        transcription_service = TranscriptionService()
+        results = transcription_service.transcribe_all(
+            s3_uris, save_metrics=save_metrics
+        )
+
+        for metric, result in zip(audio_processing_metrics, results):
+            transcription_result_model = TranscriptionResultModel(
+                s3_uri=result.s3_uri,
+                success=result.success,
+                s3_output_uri=result.s3_output_uri,
+                s3_summary_uri=result.s3_summary_uri,
+                s3_metrics_uri=result.s3_metrics_uri,
+                transcription_duration_seconds=result.transcription_duration_seconds,
+                summary_duration_seconds=result.summary_duration_seconds,
+                total_duration_seconds=result.total_duration_seconds,
+                error=result.error,
+            )
+            
+            file_results.append(ResponseModel(
+                original_filename=metric['filename'],
+                s3_uri=metric['s3_uri'],
+                processing_metrics=PerformanceMetrics(**metric['metrics']),
+                transcription_result=transcription_result_model,
+                total_pipeline_duration_seconds=0
+            ))
+
+        successful = sum(1 for r in file_results if r.transcription_result.success)
+        total_duration = time.time() - pipeline_start
+
+        return BatchResponseModel(
+            total_files=len(file_results),
+            successful=successful,
+            failed=len(file_results) - successful,
+            total_pipeline_duration=total_duration,
+            results=file_results
+        )
+
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    finally:
+        for tmp_path in tmp_paths:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
 
 def start_app() -> None:
