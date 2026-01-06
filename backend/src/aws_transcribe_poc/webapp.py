@@ -38,16 +38,17 @@ to the rest of the "backend".
 """
 
 import os
-from pathlib import Path
 import tempfile
 import time
+from pathlib import Path
+
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
-from .routers.audio import router as audio_router
 
-from .services.transcribe import TranscriptionService
+from .routers.audio import router as audio_router
 from .services.input_handler import InputHandler
+from .services.transcribe import TranscriptionService
 
 app = FastAPI(
     title="AWS Transcribe POC",
@@ -56,6 +57,7 @@ app = FastAPI(
 )
 
 app.include_router(audio_router)
+
 
 class MyResponseModel(BaseModel):
     """Response model for greeting."""
@@ -123,7 +125,7 @@ class BatchResponseModel(BaseModel):
     successful: int
     failed: int
     total_pipeline_duration: float
-    results: list[ResponseModel]    # collect processing metrics for each file
+    results: list[ResponseModel]  # collect processing metrics for each file
 
 
 @app.get("/", response_model=MyResponseModel)
@@ -182,23 +184,25 @@ async def transcribe_files(
     )
 
 
-@app.post('/upload_and_transcribe', response_model=ResponseModel)
+@app.post("/upload_and_transcribe", response_model=ResponseModel)
 async def upload_and_transcribe(
-    file: UploadFile = File(...),
-    save_metrics: bool = False
-)-> ResponseModel:
-    """ End to end pipeline: upload, process, convert to WAV, upload to s3, and transcribe."""
-
+    file: UploadFile = File(...), save_metrics: bool = False
+) -> ResponseModel:
+    """End to end pipeline: upload, process, convert to WAV, upload to s3, and transcribe."""
     pipeline_start = time.time()
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(file.filename).suffix
+    ) as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
         handler = InputHandler()
-        s3_uri, audio_processing_metrics = handler.process_input(tmp_path, file.filename)
+        s3_uri, audio_processing_metrics = handler.process_input(
+            tmp_path, file.filename
+        )
 
         transcription_service = TranscriptionService()
         results = transcription_service.transcribe_all(
@@ -207,7 +211,7 @@ async def upload_and_transcribe(
 
         if not results:
             raise RuntimeError("Transcription service returned no results")
-        
+
         transcription_result = results[0]
 
         transcription_result_model = TranscriptionResultModel(
@@ -222,7 +226,7 @@ async def upload_and_transcribe(
             error=transcription_result.error,
         )
 
-        total_duration = time.time() - pipeline_start        
+        total_duration = time.time() - pipeline_start
 
         return ResponseModel(
             original_filename=file.filename,
@@ -240,17 +244,14 @@ async def upload_and_transcribe(
             os.unlink(tmp_path)
 
 
-@app.post('/upload_and_transcribe_batch', response_model=BatchResponseModel)
+@app.post("/upload_and_transcribe_batch", response_model=BatchResponseModel)
 async def upload_and_transcribe_batch(
-    files: list[UploadFile] = File(...),
-    save_metrics: bool = False
+    files: list[UploadFile] = File(...), save_metrics: bool = False
 ) -> BatchResponseModel:
-    """ End to end pipeline for multiple files: upload, process, convert to WAV, upload to s3, and transcribe."""
-
+    """End to end pipeline for multiple files: upload, process, convert to WAV, upload to s3, and transcribe."""
     pipeline_start = time.time()
     tmp_paths = []
     file_results = []
-
 
     try:
         handler = InputHandler()
@@ -258,21 +259,22 @@ async def upload_and_transcribe_batch(
         s3_uris = []
         audio_processing_metrics = []
 
-        for file in files:        
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+        for file in files:
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=Path(file.filename).suffix
+            ) as tmp:
                 content = await file.read()
                 tmp.write(content)
                 tmp_paths.append(tmp.name)
 
                 s3_uri, audio_metrics = handler.process_input(tmp.name, file.filename)
                 s3_uris.append(s3_uri)
-                
+
                 audio_processing_metrics.append(
                     {
-                        'filename': file.filename,
-                        's3_uri': s3_uri,
-                        'metrics': audio_metrics
+                        "filename": file.filename,
+                        "s3_uri": s3_uri,
+                        "metrics": audio_metrics,
                     }
                 )
 
@@ -293,14 +295,16 @@ async def upload_and_transcribe_batch(
                 total_duration_seconds=result.total_duration_seconds,
                 error=result.error,
             )
-            
-            file_results.append(ResponseModel(
-                original_filename=metric['filename'],
-                s3_uri=metric['s3_uri'],
-                processing_metrics=PerformanceMetrics(**metric['metrics']),
-                transcription_result=transcription_result_model,
-                total_pipeline_duration_seconds=0
-            ))
+
+            file_results.append(
+                ResponseModel(
+                    original_filename=metric["filename"],
+                    s3_uri=metric["s3_uri"],
+                    processing_metrics=PerformanceMetrics(**metric["metrics"]),
+                    transcription_result=transcription_result_model,
+                    total_pipeline_duration_seconds=0,
+                )
+            )
 
         successful = sum(1 for r in file_results if r.transcription_result.success)
         total_duration = time.time() - pipeline_start
@@ -310,7 +314,7 @@ async def upload_and_transcribe_batch(
             successful=successful,
             failed=len(file_results) - successful,
             total_pipeline_duration=total_duration,
-            results=file_results
+            results=file_results,
         )
 
     except (FileNotFoundError, ValueError, RuntimeError) as e:

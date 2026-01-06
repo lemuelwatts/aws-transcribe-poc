@@ -30,26 +30,29 @@
 # that any separately negotiated standards of performance for said code
 # or program will be met for the duration of any applicable contract under which
 # the code or program is provided.
-""" Audio processing router for file upload and processing """
 
-from fastapi import APIRouter, File, UploadFile, HTTPException
-from pydantic import BaseModel
-from pathlib import Path
+"""Audio processing router for file upload and processing"""
+
+import logging
 import os
 import tempfile
 import time
-import logging
+from pathlib import Path
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from ..services.input_handler import InputHandler
 
 logger = logging.getLogger(__name__)
 
 
-
 router = APIRouter(prefix="/audio", tags=["audio"])
+
 
 class PerformanceMetrics(BaseModel):
     """Performance metrics for audio processing."""
+
     total_processing_time_seconds: float
     input_metadata: dict
     ffmpeg_conversion_time_seconds: float
@@ -59,19 +62,21 @@ class PerformanceMetrics(BaseModel):
     output_file_size_mb: float
     size_reduction_percent: float
 
+
 class AudioProcessResponse(BaseModel):
     """Response model for audio processing."""
+
     s3_uri: str
     original_filename: str
     message: str = "Audio Processed Successfully"
     metrics: PerformanceMetrics
 
+
 @router.post("/process", response_model=AudioProcessResponse)
 async def process_audio(file: UploadFile = File(...)) -> AudioProcessResponse:
-    """
-    Upload and process audio/video files 
+    """Upload and process audio/video files
 
-    Converts to WAV format and uploads to s3. 
+    Converts to WAV format and uploads to s3.
 
     Args:
 
@@ -80,7 +85,9 @@ async def process_audio(file: UploadFile = File(...)) -> AudioProcessResponse:
     """
     request_start = time.time()
     # save file temporarily so we can send it across network
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(file.filename).suffix
+    ) as tmp_file:
         content = await file.read()
         tmp_file.write(content)
         tmp_file_path = tmp_file.name
@@ -88,16 +95,16 @@ async def process_audio(file: UploadFile = File(...)) -> AudioProcessResponse:
     try:
         handler = InputHandler()
         uri, metrics = handler.process_input(tmp_file_path, file.filename)
-        logger.info(f'request time: {round(time.time() - request_start, 3)}')
+        logger.info(f"request time: {round(time.time() - request_start, 3)}")
         return AudioProcessResponse(
-            s3_uri=uri, 
+            s3_uri=uri,
             original_filename=file.filename,
-            metrics=PerformanceMetrics(**metrics)
+            metrics=PerformanceMetrics(**metrics),
         )
-    
+
     except (FileNotFoundError, ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     finally:
         if os.path.exists(tmp_file_path):
             os.unlink(tmp_file_path)

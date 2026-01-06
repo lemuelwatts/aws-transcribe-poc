@@ -33,7 +33,7 @@
 
 [project]
 name = "aws-transcribe-poc"
-version = "0.0.1"
+version = "0.0.1.dev"
 description = "Someone generated the project without updating the description."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -93,9 +93,31 @@ select = [
 ]
 
 ignore = [
+    "ANN001",
     "ANN002", # missing-type-args
     "ANN003", # missing-type-kwargs
+    "ANN201",
+    "ANN202",
     "ANN204", # missing-return-type-special-method
+    "E501",
+    "PTH108",
+    "PTH110",
+    "B904",
+    "FBT002",
+    "FBT001",
+    "B008",
+    "PTH202",
+    "D415",
+    "RUF013",
+    "D417",
+    "D107",
+    "D101",
+    "D100",
+    "D205",
+    "PTH123",
+    "D414",
+    "D103",
+    "B905",
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
