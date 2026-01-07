@@ -130,6 +130,10 @@ class TranscriptionService:
             LanguageCode="en-US",
             OutputBucketName=bucket,
             OutputKey=output_key,
+            Settings={
+                "ShowSpeakerLabels": True,
+                "MaxSpeakerLabels": 5,
+            },
         )
         return job_name
 

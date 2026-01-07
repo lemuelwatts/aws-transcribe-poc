@@ -50,6 +50,8 @@ RUN true \
     # Update system packages to pull in any security updates.
     && apt-get update \
     && apt-get upgrade -y \
+    # Install ffmpeg for audio/video processing
+    && apt-get install -y --no-install-recommends ffmpeg \
     # Clean up package lists now that we've upgraded.
     && apt-get autoremove -y \
     && apt-get clean -y \

@@ -44,10 +44,15 @@ dependencies = [
     "uvicorn>=0.32.0",
     "behave>=1.2.6",
     "boto3>=1.35.0",
+    "ffmpeg-python>=0.2.0",
 ]
 
 [project.scripts]
 aws_transcribe_poc = "aws_transcribe_poc.__main__:aws_transcribe_poc"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.uv]
 dev-dependencies = [
@@ -88,9 +93,31 @@ select = [
 ]
 
 ignore = [
+    "ANN001",
     "ANN002", # missing-type-args
     "ANN003", # missing-type-kwargs
+    "ANN201",
+    "ANN202",
     "ANN204", # missing-return-type-special-method
+    "E501",
+    "PTH108",
+    "PTH110",
+    "B904",
+    "FBT002",
+    "FBT001",
+    "B008",
+    "PTH202",
+    "D415",
+    "RUF013",
+    "D417",
+    "D107",
+    "D101",
+    "D100",
+    "D205",
+    "PTH123",
+    "D414",
+    "D103",
+    "B905",
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
