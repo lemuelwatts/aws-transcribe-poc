@@ -181,7 +181,7 @@ class TranscriptionService:
         return transcription_data["results"]["transcripts"][0]["transcript"]
 
     def _summarize_text(self, text: str) -> str:
-        """Summarize text using AWS Bedrock with Amazon Titan.
+        """Summarize text using AWS Bedrock with Amazon Nova Micro.
 
         Args:
             text: The text to summarize.
@@ -230,12 +230,17 @@ class TranscriptionService:
             "Action Items section. Do not skip either one."
         )
 
-        model_id = os.environ.get("BEDROCK_MODEL_ID", "amazon.titan-text-express-v1")
+        model_id = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
 
         request_body = {
-            "inputText": prompt,
-            "textGenerationConfig": {
-                "maxTokenCount": 4096,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"text": prompt}],
+                }
+            ],
+            "inferenceConfig": {
+                "maxTokens": 4096,
                 "temperature": 0.3,
                 "topP": 0.9,
             },
@@ -249,7 +254,7 @@ class TranscriptionService:
         )
 
         response_body = json.loads(response["body"].read())
-        return response_body["results"][0]["outputText"]
+        return response_body["output"]["message"]["content"][0]["text"]
 
     def _upload_summary(self, bucket: str, key: str, summary: str) -> None:
         """Upload summary text to S3.
