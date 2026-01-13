@@ -47,6 +47,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from .routers.audio import router as audio_router
+from .routers.transcript import router as transcript_router
 from .services.input_handler import InputHandler
 from .services.transcribe import TranscriptionService
 
@@ -57,6 +58,7 @@ app = FastAPI(
 )
 
 app.include_router(audio_router)
+app.include_router(transcript_router)
 
 
 class MyResponseModel(BaseModel):
