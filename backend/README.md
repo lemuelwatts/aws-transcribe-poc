@@ -102,6 +102,38 @@ Convert and upload to S3 without transcribing:
 curl -X POST "http://localhost:8000/audio/process" \
   -F "file=@/path/to/meeting.mp4"
 ```
+### Analyze Meeting Transcript
+
+Analyze a meeting transcript with user notes to generate insights:
+
+# Basic analysis (no file saved)
+curl -X POST "http://localhost:8000/analysis/analyze" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_file_path": "backend/tests/performance/test_files/aissemble_dsu.json",
+    "save_report": false
+  }'
+
+# Save analysis report to output/ folder
+curl -X POST "http://localhost:8000/analysis/analyze" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_file_path": "backend/tests/performance/test_files/aissemble_dsu.json",
+    "save_report": true
+  }'
+
+### Analysis Configuration
+Analysis behavior is controlled b ybackend/src/aws_transcribe_poc/services/analyzer_config.json:
+{
+  "find_inconsistencies": true,
+  "compliance_check": true,
+  "improvement_opportunities": true,
+  "compliance_rules": [
+    "PII data movement requires security review",
+    "Vendor contracts require legal sign-off",
+    "Production deployments require change approval"
+  ]
+}
 
 ## Transcription Output Structure
 

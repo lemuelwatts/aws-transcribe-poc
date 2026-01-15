@@ -47,9 +47,9 @@ import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from .routers.analysis import router as analysis_router
 from .routers.audio import router as audio_router
 from .routers.transcript import router as transcript_router
-from .services.analyzer import AnalyzerService
 from .services.input_handler import InputHandler
 from .services.transcribe import TranscriptionService
 
@@ -63,6 +63,7 @@ app = FastAPI(
     version="0.0.1",
 )
 
+app.include_router(analysis_router)
 app.include_router(audio_router)
 app.include_router(transcript_router)
 
@@ -130,19 +131,17 @@ class BatchResponseModel(BaseModel):
     results: list[ResponseModel]  # collect processing metrics for each file
 
 
-class AnalyzeRequestModel(BaseModel):
-    """Request model for meeting analysis"""
-
-    input_file_path: str
-    save_report: bool = False
-
-
-class AnalyzeResponseModel(BaseModel):
-    """Response model for meeting analysis"""
+class CompleteAnalysisResponseModel(BaseModel):
+    """Response model for complete meeting analysis pipeline."""
 
     success: bool
-    final_report: dict | None = None
-    output_file_path: str | None = None
+    original_filename: str
+    s3_uri: str
+    processing_metrics: PerformanceMetrics
+    transcription_result: TranscriptionResultModel
+    analysis_report: dict | None = None
+    analysis_output_path: str | None = None
+    total_pipeline_duration_seconds: float
     error: str | None = None
 
 
@@ -344,45 +343,29 @@ async def upload_and_transcribe_batch(
                 os.unlink(tmp_path)
 
 
-@app.post("/analyze", response_model=AnalyzeResponseModel)  
-async def analyze_meeting(request: AnalyzeRequestModel) -> AnalyzeResponseModel:
-    """Analyze a meeting transcript and generate insights.
+# TODO: full end to end workflow but need to add in the part where we combine transcripts & notes into a
+# file so we can ingest that for the analysis
+@app.post("/upload_and_generate_notes", response_model=CompleteAnalysisResponseModel)
+async def upload_and_generate_notes(
+    file: UploadFile = File(...), save_report: bool = True, save_metrics: bool = False
+) -> CompleteAnalysisResponseModel:
+    """Complete pipeline: upload, process, transcribe, and generate meeting analysis.
 
-    Takes in a JSON file containing transcript and user notes and generates
-    a comprehensive analysis including:
-    - Summary
-    - Action Items
-    - Inconsistencies (optional)
-    - Compliance issues (optional)
-    - Meeting improvements (optional)
+    This endpoint combines all steps:
+    1. Upload and process audio/video file
+    2. Convert to WAV and upload to S3
+    3. Transcribe using AWS Transcribe
+    4. Combines transcription results and user notes
+    5. Generate meeting notes (summary, action items, insights)
 
     Args:
-        request: Request containing:
-            - input_file_path: Path to JSON file with meeting context
-            - save_report: whether to save report to output/ folder (default: False)
+        file: Audio or video file to process
+        save_report: Whether to save analysis report to output/ folder (default: True)
+        save_metrics: Whether to save processing metrics to S3 (default: False)
 
     Returns:
-        AnalyzeResponseModel with analysis results and optional file path (if save_report=True)
+        Complete analysis results with transcription and meeting insights
     """
-    try:
-        input_path = Path(request.input_file_path)
-        if not input_path.exists():
-            raise FileNotFoundError(f"Input file not found: {request.input_file_path}")
-
-        analyzer_service = AnalyzerService(request.input_file_path)
-
-        report, output_path = analyzer_service.run_analysis(
-            save_report=request.save_report
-        )
-
-        return AnalyzeResponseModel(
-            success=True, final_report=report.model_dump(), output_file_path=output_path
-        )
-    except FileNotFoundError as e:
-        return AnalyzeResponseModel(success=False, error=str(e))
-    except Exception as e:
-        logger.error(f"Error during analysis: {e}")
-        return AnalyzeResponseModel(success=False, error=str(e))
 
 
 def start_app() -> None:
