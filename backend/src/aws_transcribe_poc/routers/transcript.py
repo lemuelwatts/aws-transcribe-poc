@@ -166,15 +166,17 @@ async def normalize_transcript(
         json_data = {
             "job_name": result.job_name,
             "speakers_count": result.speakers_count,
-            "segments": [
-                {
-                    "speaker": seg.speaker,
-                    "start_time": seg.start_time,
-                    "end_time": seg.end_time,
-                    "text": seg.text,
-                }
-                for seg in result.segments
-            ],
+            "transcript": {
+                "segments": [
+                    {
+                        "speaker": seg.speaker,
+                        "start_time": seg.start_time,
+                        "end_time": seg.end_time,
+                        "text": seg.text,
+                    }
+                    for seg in result.segments
+                ],
+            },
         }
 
         # Save JSON file

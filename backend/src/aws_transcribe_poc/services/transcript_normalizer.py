@@ -66,15 +66,17 @@ class NormalizedTranscript:
         return {
             "job_name": self.job_name,
             "speakers_count": self.speakers_count,
-            "segments": [
-                {
-                    "speaker": seg.speaker,
-                    "start_time": seg.start_time,
-                    "end_time": seg.end_time,
-                    "text": seg.text,
-                }
-                for seg in self.segments
-            ],
+            "transcript": {
+                "segments": [
+                    {
+                        "speaker": seg.speaker,
+                        "start_time": seg.start_time,
+                        "end_time": seg.end_time,
+                        "text": seg.text,
+                    }
+                    for seg in self.segments
+                ],
+            },
         }
 
 
