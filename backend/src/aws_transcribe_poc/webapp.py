@@ -344,7 +344,7 @@ async def upload_and_transcribe_batch(
                 os.unlink(tmp_path)
 
 
-@app.post("/analyze", ResponseModel=None)  # todo: update this
+@app.post("/analyze", response_model=AnalyzeResponseModel)  
 async def analyze_meeting(request: AnalyzeRequestModel) -> AnalyzeResponseModel:
     """Analyze a meeting transcript and generate insights.
 
