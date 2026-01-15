@@ -37,6 +37,7 @@ This module configures the FastAPI Web Server that provides HTTP/API access
 to the rest of the "backend".
 """
 
+import logging
 import os
 import tempfile
 import time
@@ -48,8 +49,13 @@ from pydantic import BaseModel
 
 from .routers.audio import router as audio_router
 from .routers.transcript import router as transcript_router
+from .services.analyzer import AnalyzerService
 from .services.input_handler import InputHandler
 from .services.transcribe import TranscriptionService
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 app = FastAPI(
     title="AWS Transcribe POC",
@@ -59,12 +65,6 @@ app = FastAPI(
 
 app.include_router(audio_router)
 app.include_router(transcript_router)
-
-
-class MyResponseModel(BaseModel):
-    """Response model for greeting."""
-
-    content: str = "Hello World"
 
 
 class TranscriptionRequestModel(BaseModel):
@@ -130,10 +130,26 @@ class BatchResponseModel(BaseModel):
     results: list[ResponseModel]  # collect processing metrics for each file
 
 
-@app.get("/", response_model=MyResponseModel)
-async def root() -> MyResponseModel:
+class AnalyzeRequestModel(BaseModel):
+    """Request model for meeting analysis"""
+
+    input_file_path: str
+    save_report: bool = False
+
+
+class AnalyzeResponseModel(BaseModel):
+    """Response model for meeting analysis"""
+
+    success: bool
+    final_report: dict | None = None
+    output_file_path: str | None = None
+    error: str | None = None
+
+
+@app.get("/")
+async def root():
     """Root endpoint."""
-    return MyResponseModel(content="Hello World")
+    return "Healthy"
 
 
 @app.post("/transcribe", response_model=TranscriptionResponseModel)
@@ -326,6 +342,47 @@ async def upload_and_transcribe_batch(
         for tmp_path in tmp_paths:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+
+@app.post("/analyze", ResponseModel=None)  # todo: update this
+async def analyze_meeting(request: AnalyzeRequestModel) -> AnalyzeResponseModel:
+    """Analyze a meeting transcript and generate insights.
+
+    Takes in a JSON file containing transcript and user notes and generates
+    a comprehensive analysis including:
+    - Summary
+    - Action Items
+    - Inconsistencies (optional)
+    - Compliance issues (optional)
+    - Meeting improvements (optional)
+
+    Args:
+        request: Request containing:
+            - input_file_path: Path to JSON file with meeting context
+            - save_report: whether to save report to output/ folder (default: False)
+
+    Returns:
+        AnalyzeResponseModel with analysis results and optional file path (if save_report=True)
+    """
+    try:
+        input_path = Path(request.input_file_path)
+        if not input_path.exists():
+            raise FileNotFoundError(f"Input file not found: {request.input_file_path}")
+
+        analyzer_service = AnalyzerService(request.input_file_path)
+
+        report, output_path = analyzer_service.run_analysis(
+            save_report=request.save_report
+        )
+
+        return AnalyzeResponseModel(
+            success=True, report=report.model_dump(), output_file_path=output_path
+        )
+    except FileNotFoundError as e:
+        return AnalyzeResponseModel(success=False, error=str(e))
+    except Exception as e:
+        logger.error(f"Error during analysis: {e}")
+        return AnalyzeResponseModel(success=False, error=str(e))
 
 
 def start_app() -> None:
