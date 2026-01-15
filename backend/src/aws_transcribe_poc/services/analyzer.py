@@ -306,6 +306,7 @@ class AnalyzerService:
 
         Path("output").mkdir(
             parents=True,
+            exist_ok=True
         )
 
         output_file_path = f"output/{cleaned_title}_{timestamp}.json"
