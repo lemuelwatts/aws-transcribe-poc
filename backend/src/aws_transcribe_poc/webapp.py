@@ -376,7 +376,7 @@ async def analyze_meeting(request: AnalyzeRequestModel) -> AnalyzeResponseModel:
         )
 
         return AnalyzeResponseModel(
-            success=True, report=report.model_dump(), output_file_path=output_path
+            success=True, final_report=report.model_dump(), output_file_path=output_path
         )
     except FileNotFoundError as e:
         return AnalyzeResponseModel(success=False, error=str(e))
