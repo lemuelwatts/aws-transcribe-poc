@@ -83,8 +83,14 @@
                     <version>${version.habushu.plugin}</version>
                     <extensions>true</extensions>
                     <configuration>
-                        <pythonVersion>3.12.8</pythonVersion>
+                        <overridePackageVersion>false</overridePackageVersion>
                     </configuration>
+                    <executions>
+                        <execution>
+                            <id>default-baton-migrate</id>
+                            <phase>none</phase>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

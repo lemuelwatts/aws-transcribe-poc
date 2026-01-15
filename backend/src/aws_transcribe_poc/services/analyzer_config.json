@@ -1,0 +1,10 @@
+{
+    "find_inconsistencies": true,
+    "compliance_check": true,
+    "improvement_opportunities": true,
+    "compliance_rules": [
+      "PII data movement requires security review",
+      "Vendor contracts require legal sign-off",
+      "Production deployments require change approval"
+    ]
+  }

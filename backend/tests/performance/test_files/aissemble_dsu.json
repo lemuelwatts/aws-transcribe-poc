@@ -1,0 +1,196 @@
+{
+    "job_name": "transcribe-20260106-192528_meeting_AUDIO_ONLY_TEST-20260106192724",
+    "speakers_count": 4,
+    "transcript": {
+      "segments": [
+        {
+          "speaker": "spk_0",
+          "start_time": 2.14,
+          "end_time": 151.55,
+          "text": "So, um, we met with a team yesterday that's interested in sort of an offshoot of the cat capability. Um, I think, so cat used to be called Speechense. Um, Tay, you're nodding your head, Lemuel, you're nodding your head. So I think you both know what those, what, what that was. But it's basically a speech transcription capability we use that to win the CBP work and they've kind of evolved that into what they call speech assist over on the CBP side. Um, so anyway, there, there's a, there's a market team that's interested in it. It's the Navy PEO MLB, so it's like the manpower logistics and business solutions team within the Navy, um, and they provide like a lot of the backend systems for the Navy. Um, one of the things they're looking at is like how can they better convert meetings into like a transcription. Uh, a summary of what happened in the meeting, action items that came out of the meeting. So how can they kind of automate that process? Um, and you might be wondering like, why not just use co-pilot, right? Cause like co-pilot could just do all of that and in fact used to do all of that for Booz Allen. Well, kind of like us, like they don't have access to it right now anymore, so they're looking for how, what could they, what could they, what's the art of the possible for right now, um. And how they could do something like this, um, you know, in the future, I would imagine like if because they're a Microsoft shop, like eventually they'll they'll get some Microsoft capability that would subsume this, but in the interim, they're looking at like what could we do today and now, um. And so they're looking to do the market team wants to do a demo to the navy in like early to mid January, so pretty tight timelines. Um, so I think what, what I'm going to have us pivot up, pivot to do is kind of put a pin in some of the OIP stuff for right now. Um, Nick, your tasking won't change because like the SDA, like we need to continue that work, but for Lemuel and Tay, um, kind of do something like akin to a, a, a, like an RP where we kind of build them a rapid prototype, um. To, to show the art of the possible and how we can convert the, the, um, you know, like a recorded meeting like this one into, um, you know, a transcription, summary, action items, things like that. So, so I'll pause there and see if like just at a high level that all makes sense and if you have any kind of immediate questions, then I can go into a few more details."
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 152.979,
+          "end_time": 166.369,
+          "text": "Are we using what is already set up for the speech assist? I can't remember like what features that has, but I know it does, it does the transcript transcription translation using like Google's Gemini, right?"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 166.99,
+          "end_time": 424.529,
+          "text": "Yeah, so, so, so let, let's jump into some of this, the technical considerations. It's a really good question, Tay. Um, so there's a couple of things, um, so we want to be able to run this in an AWS environment. That's what the market team wants. Uh, cat was developed in Google Gemini. So that, that means that like we probably are not going to be able to directly reuse Cat because if we want to deploy this into AWS then we wouldn't, we wouldn't be able to do that with Gemini. Um, but Google does have, I mean, sorry, AWS does have a transcribe like service that, that is, looks like it would largely do what we needed to do and would replace what Gemini was previously doing. I mean, Pat was originally like a. Like language translation capability and then some of the other things got bolted on later. In this case, they don't need language translation, they just need the, the other aspects. Um, so what we would want to try to do is we might use CA as like a reference implementation for how we did things and what we did, but we're not going to try to directly reuse the code, so. Does that make sense in terms of like how we would use it? Yeah, so it, it, it may have some of these things, but we're not gonna be able to directly reuse them. Um, and then there's one other kind of data point. So Booz Allen also has another internal investment called Ignition, which they've renamed to be internal document processor because our legal team like does not like us to come up with fancy names for things, probably because it runs afoul of like trademarks, you know what I mean? Like, you know, it's like people come up with cool names of things, but like, but they're not really things that we can actually, um, call our own. So, um, So The Ignition. I'm just going to call it ignition because it's easier than saying um the long-winded version of it, but ignition can convert like a set of uh like a document into Uh, it can extract the action items and it can integrate with Jira. So what they want us to do is to kind of use like the, the CAT capability to create the transcript and to, um, summarize it, and they will extract the action items out. If we can extract them out, we, we could try, but like they, they apparently seem to think that they've got that taken care of. And then they've got a connector that would take those action items and would create tasks in Jira automatically from those action items. Um, I'm not sure what the handoff would look like between, um, you know, what we build and what they've got, so that's something we'll have to iron out, you know, but somehow, you know, it could be an API or maybe we're just dropping at the, the transcript into a location where they can pick it up. Like I think we need to work out those details, um. But we would be integrating with them for that, that last piece. And the, the goal, eventual goal is they want to be able to process like meetings that were are several hours long. Um, I, I cautioned the team to say, you know, out of the gates, we should probably be targeting something smaller, um, like we, we know from the experience on CBP, like on CAT, like they can't even really do reliable 90 minute long. Um, audio segments right now, like sometimes it'll work, but, but most of the time it fails and, and like when you get to like these big long things, you really need to chunk them up and divide them up into pieces, like because it's just not reliable to Um, To, uh To try to process these, these really big files. So, so that's the other piece. So I think in the short term, right, we would just be taking something that's like a 15 to 30 minute type of meeting, um, and then kind of extracting the audio from the recording, passing that through AWS Transcribe to see what we can get out the other end from a transcription standpoint, and then we'll have to evaluate if AWS Transcribe can also do summaries or if we need to pull in something else, um, around that piece, OK. So I'm going to just again pause and just see if like. That additional technical detail spurs any other questions or if you, you know, didn't make anything didn't make sense."
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 426.239,
+          "end_time": 431.67,
+          "text": "Do we need to make a front end for this or no, at the moment, like just"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 431.67,
+          "end_time": 436.47,
+          "text": "it's a good question. I do not think we're going to need to make a front end for this."
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 437.17,
+          "end_time": 467.66,
+          "text": "It could take like 5 minutes for like testing or I don't know, even just super simple, like if we wanted to drag and drop something on like streamlet, I thought that would be easy. Um Yeah, not like it's a huge question. The only other thing I had was, um, do I need the AWS account? I don't know if I I know I have Azure access under like, CTO other projects I've done, but I don't. I think I have a native. I don't know actually. Do I need permissions or?"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 468.179,
+          "end_time": 605.13,
+          "text": "So, um. We will need, so we have for the assemble team, we have an AWS account that we've been using. Um, Obviously we'll need to be a little bit cognizant of the spend. Like I have no idea what like the transcribed, um, costs, you know, if it's just like, you know, tens of, you know, even a few $100 I don't really care about that. Um, that that's all nothing. But if we're going to be spending like thousands of thousands of dollars doing transcriptions, then we'll we'll need to have a conversation. Um, about that, but I, I, I have no idea what transcribes like, um. Consumption costs are. I'm sure there's some, um. So, but, but point being, sorry to get that long-winded way of getting to your actual question, which is like we have an AWS environment that we can leverage, uh, within the assemble. Ultimately we would probably want to deploy this into the ignition environment and they also have an AWS environment and we'll need to figure out the access for that. I don't, you know, it's similar to the one that we use for assemble. It's hosted, you know, we're sort of hosted, it's um. Like ETSS, you know, managed, uh, kind of behind the firewall, etc. um. Does that makes sense then? Yes. So, so yes, we, we, we will get you access. Lemuel, you probably already have access to that environment, so. Yeah, I do, yeah. Cool. All right, any other questions before we kind of maybe jump into brainstorming a set of kind of Tickets OK, so I think the two things that we probably need to move out on is like, um, splitting the audio out from kind of a, you know, like a team's recording like this one, so we'll be able to take the recording of this actual meeting and then like split the audio. Uh, Ryan had indicated that, um, We've done this in plenty of places, um, and so we, there should be some, you know, I think it's just using like FF MPEG or whatever like to like split things out. So I, I don't know that it's super complicated. It sounds like we've done this in other places, um, that we can at least reference and look at, uh, for how to do it. Does that, does that jive Tay and Lemuel?"
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 605.599,
+          "end_time": 617.739,
+          "text": "OK. Yeah, my other project actually is a speech to text tool, so I take videos and convert them or audio files and use FFME library to do all that stuff."
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 618.39,
+          "end_time": 642.44,
+          "text": "OK Um, OK, cool. Um, and that, so, so I think that's one thing. So that sounds like that, that will be very straightforward since we've done this before, I know how to do it. And so I think Um, the second step would be then. Taking, sorry, did you say Tay that does transcription, what the other stuff that you're doing or just that it's"
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 642.44,
+          "end_time": 650.239,
+          "text": "yeah, and so we use open AI's whisper bottles. Gotcha. OK, so that is a free option but"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 650.239,
+          "end_time": 650.559,
+          "text": "needs"
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 650.559,
+          "end_time": 651.109,
+          "text": "GPU."
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 651.9,
+          "end_time": 653.659,
+          "text": "I use GPU. Well,"
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 653.82,
+          "end_time": 679.58,
+          "text": "no, we need it. Like I can run it locally CPU and if it's, I mean, like a really short file will take like a minute or so. I don't know, it, it kind of depends, and but they do have faster models, which I have not used yet, want to use, which is just a faster implementation of the regular one, but if we're trying to Transcribe a huge file, it does take a while, but"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 680.4,
+          "end_time": 717.469,
+          "text": "Yep. Yeah. OK, uh, and is that, is that client work that doing that? OK, OK, so there might be some things we could. Kind of leverage just from like a how you're doing things perspective. Um, we would of course never directly reuse like take that client code and uh pull it in directly because we, we can't do that. So I'm saying that out loud just because like everyone sometimes like people don't fully understand like the Like what they can and can't do when it comes to like, you know, stuff that they developed for a client. So, um, yeah,"
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 717.7,
+          "end_time": 720.539,
+          "text": "always good, good practice to say, yeah,"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 721.099,
+          "end_time": 780.119,
+          "text": "um, and then, all right, so then the second thing is I think we should at least look at AWS Transcribe. If we find that it's like not cost effective or that it's not performing well enough for what we need, then we can of course pivot to maybe looking at like Whisper and deploying that, but It seems like in like given the quick turn timelines, if we can leverage kind of the managed AWS service, and that's probably gonna give us like the fastest pathway to, to getting something built here. Um, OK, so I, I guess like how, how would you two like to divide that up? You know, Tay, it sounds like you have some good experience with the splitting of the audio. I don't know if we want to start there and have Lemuel look at the transcribe piece or like if you really have a burning urge, Tay, to look at the transcribe AWS transcribe, like totally fine with that too. I, I don't care. Just want to see how, how to chunk this up, um, so we can kind of move in parallel."
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 782.64,
+          "end_time": 785.859,
+          "text": "Um, yeah, I have no preference. I'm happy to do whatever."
+        },
+        {
+          "speaker": "spk_2",
+          "start_time": 786.83,
+          "end_time": 793.559,
+          "text": "Yeah, I've never, I never even heard of the AWS Transcribe thing before. I'm just looking it up now, but I can, I can definitely, you know, dive into that."
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 793.84,
+          "end_time": 911.549,
+          "text": "OK, all right, um. Let's do that. I think we should target like an assemble light type of project to, to do this in, um. You know, I think for now, it's fine if like they're two independent things that, and then we can pull them together here, once we have something that's actually worth, worthwhile. Um, so let me, let me think here. Um, So I think, you know, each of you probably has enough information to write up a ticket um for kind of next steps on those respective tasks. Um, I mean, my goal is to get you to a point where you can kind of be pretty self-sufficient. Because I'll be out. Ryan will be out. Looks, sounds like both of you are going to be mostly in. I mean, I saw you, but let me, I know you just took a lot of time off, so you're probably like working, working through most of the break. Yeah, it's, it's the, it's the, uh, that's what you get for going to Hawaii. That's right. So, um, OK, so yeah, I just wanna make sure you, you both have enough direction. I mean, I'm in Monday and Tuesday, but maybe we can get some tickets written up on this. Um, and let me just kind of recap actions. Um, so I think there's an action that I, I need to take to determine if we need a UI for the demo. Um Lemuel, you're gonna take an action to write up a ticket around AWS Transcribe, um, and starting to vet the capabilities there. And then Tay, you're gonna start with kind of grabbing, um, like a recorded meeting like this one, splitting out the audio so we can pass that up to transcribe, and then obviously we'll need to integrate those two pieces just to see what can come out the other end. Um, does that kind of, I think there's the last thing. Oh, go ahead, sorry,"
+        },
+        {
+          "speaker": "spk_2",
+          "start_time": 911.719,
+          "end_time": 917.049,
+          "text": "I was gonna say for the AWS stuff we're still gonna use the AI ops account, right? The CA Ops account"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 917.4,
+          "end_time": 918.789,
+          "text": "for now just use CA,"
+        },
+        {
+          "speaker": "spk_2",
+          "start_time": 919.229,
+          "end_time": 920.099,
+          "text": "yeah, OK,"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 920.559,
+          "end_time": 971.159,
+          "text": "yeah. Um, and then the last thing is all, all, um, Work, the guy's name is Nick Napier, who, who's also in the CTO but just in a different part of CTO. Um, he, he's the lead for ignition, and so I'll work with him to understand, like, you know, we, we need to start maybe understanding what's the handoff once we have this kind of piece working, like what's the handoff from what we're gonna provide to, to what where ignition picks it up and, and also how to get access to their environment, so. Cool. All right, any other questions or? Things, um, On that, I think you can just like gracefully kind of put a pause on whatever ticket you're working on, um, for OIP and then we'll pivot directly to this."
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 974.719,
+          "end_time": 975.2,
+          "text": "Sounds good."
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 975.969,
+          "end_time": 990.289,
+          "text": "Cool. All right. Uh, all right, so I think that's, that's it for stand up. Nick, did you have anything, you know, we chatted kind of yesterday, so I didn't know if you had any, anything relevant, just coming for that space defense stuff."
+        },
+        {
+          "speaker": "spk_3",
+          "start_time": 991.53,
+          "end_time": 1038.63,
+          "text": "Uh, no, I just put a ticket on the board and I'm working through what we talked about, which is, uh, I guess for the edification of Vule and Tay is we got feedback specifically relating to how does MLOs apply and like an edge deployment scenario and building models that you're going to deploy to the edge. And so I'm actually kind of working through honing our story a little bit to specifically address some of those cases and then probably reaching out to a couple of teams just for some additional information because it seems like there are some. Prior either investments or projects that have, have done some work around this, like Space Gateway and a few others, um, that may be worthwhile to like pull on some of their knowledge, um, either to get a nod up and down, yeah, you're on the right track and kind of reconsider some of that stuff or to say no, you're out of the ballpark and, and here's some information we can provide you to help get you to the right page."
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 1040.109,
+          "end_time": 1070.89,
+          "text": "It's cool. All right. Um, if there's nothing else, I think that's a wrap for stand-up today. I will send out the the link to the recording of this to make sure it's shared with everyone. My goal is to try to use this as like the first, um, test for how well we can take a meeting and, um, transcribe it and also summarize it and pull out the actions, that kind of stuff, so."
+        },
+        {
+          "speaker": "spk_1",
+          "start_time": 1071.569,
+          "end_time": 1087.27,
+          "text": "Oh, that makes me think of another question. For the transcription aspect, so like, whisper models only transcribe the actual content, but there's no like, like, this person said this, like labeling of the speaker. Correct,"
+        },
+        {
+          "speaker": "spk_0",
+          "start_time": 1087.329,
+          "end_time": 1136.369,
+          "text": "yeah. Yeah, so I, I am pretty sure when I looked at AWS Transcribed that it will do diarization, but that'll have to be some of the Uh, exploration. Also, I, I don't know if that's like we'll have to circle back and, and see if that's actually a critical feature for them, um, or not, because like, again, for a meeting summary. May not be super important, um. I don't know, we'll we'll, we'll have to see as, as we get down the road a little bit further, but it's a, it's a good point. Cool. Right. Good deal. All right, everyone, uh, let me know if you need anything and um we'll move out from here. Appreciate it. Thanks."
+        }
+      ]
+    },
+    "attendee_notes": {
+      "Test Person": {
+        "raw_notes": "- Migration timeline: 2 weeks, done by Jan 23\n- Can skip security review for internal migration\n- API deprecation in Feb - added to backlog\n- Gabe handling legal escalation"
+      },
+      "Another Person": {
+        "raw_notes": "- Timeline conflict: I said 3 weeks, Eli says 2??\n- Security review concern raised by Gabe - unresolved\n- My vendor contract blocked on legal - Gabe escalating"
+      }
+    }
+  }
