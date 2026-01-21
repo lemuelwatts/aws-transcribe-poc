@@ -9,7 +9,7 @@ from ..services.speaker_assignment import SpeakerAssignment
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/speakers", tag=["speakers"])
+router = APIRouter(prefix="/speakers", tags=["speakers"])
 
 class IdentifyRequestModel(BaseModel):
     
@@ -36,7 +36,7 @@ async def identify_speakers(request: IdentifyRequestModel) -> IdentifyResponseMo
 
     try:
         transcript_path = Path(request.transcript_file_path)
-        if not transcript_path.exist():
+        if not transcript_path.exists():
             raise FileNotFoundError(f"Transcript file path not found: {request.transcript_file_path}")
         
         with open(transcript_path) as f:
