@@ -112,3 +112,45 @@ class S3Handler:
         except Exception as e:
             logger.error(f"Error in s3 upload. file: {file_path}. error: {e!s}")
             raise RuntimeError(f"Failed to upload to s3: {e!s}")
+
+    def upload_file_to_path(self, file_path: str, s3_key: str) -> tuple[str, dict]:
+        """Upload a file to a specific S3 key path.
+
+        Args:
+            file_path: Local path to the file to upload
+            s3_key: The full S3 key (path) to upload the file to
+
+        Returns:
+            Tuple of (s3_uri, metrics_dict)
+        """
+        try:
+            file_size_bytes = os.path.getsize(file_path)
+            file_size_mb = file_size_bytes / (1024 * 1024)
+
+            logger.info(f"uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
+
+            upload_start = time.time()
+            self.s3_client.upload_file(file_path, self.bucket_name, s3_key)
+            upload_duration = time.time() - upload_start
+
+            upload_speed_mbps = (
+                file_size_mb / upload_duration if upload_duration > 0 else 0
+            )
+
+            s3_uri = f"s3://{self.bucket_name}/{s3_key}"
+
+            metrics = {
+                "s3_upload_time_seconds": round(upload_duration, 3),
+                "s3_upload_speed_mbps": round(upload_speed_mbps, 2),
+                "file_size_bytes": file_size_bytes,
+                "file_size_mb": round(file_size_mb, 2),
+            }
+
+            logger.info(
+                f"Upload successful: {s3_uri} ({upload_duration:.2f}s @ {upload_speed_mbps:.2f} MB/s)"
+            )
+            return s3_uri, metrics
+
+        except Exception as e:
+            logger.error(f"Error in s3 upload. file: {file_path}. error: {e!s}")
+            raise RuntimeError(f"Failed to upload to s3: {e!s}")

@@ -30,6 +30,7 @@
 # that any separately negotiated standards of performance for said code
 # or program will be met for the duration of any applicable contract under which
 # the code or program is provided.
+
 """Analysis router for meeting transcript analysis and insights generation.
 
 This module provides endpoints for analyzing meeting transcripts and generating
