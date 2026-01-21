@@ -36,7 +36,7 @@
 This module configures the FastAPI Web Server that provides HTTP/API access
 to the rest of the "backend".
 """
-
+import json
 import logging
 import os
 import tempfile
@@ -55,6 +55,7 @@ from .routers.speaker import router as speaker_router
 from .routers.transcript import router as transcript_router
 from .services.input_handler import InputHandler
 from .services.transcribe import TranscriptionService
+from .services.speaker_assignment import SpeakerAssignment
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -364,16 +365,75 @@ async def upload_and_transcribe_batch(
 @app.post("/process_meeting", response_model=CompleteMeetingResponseModel)
 async def process_meeting(
     file: UploadFile = File(...),
-
+    identify_speakers: bool = True,
+    save_report: bool = True,
+    save_metrics: bool = False
 ) -> CompleteMeetingResponseModel:
     """ Complete meeting analysis """
     # preprocess file using ffmpeg service
+    pipeline_start = time.time()
 
-    # transcribe using aws service
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(file.filename).suffix
+    ) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
 
-    # where is that file located? now read it in and generate speaker mapping
-    pass
+    try:
+        handler = InputHandler()
+        s3_uri, audio_processing_metrics = handler.process_input(
+            tmp_path, file.filename
+        )
 
+        transcription_service = TranscriptionService()
+        results = transcription_service.transcribe_all(
+            [s3_uri], save_metrics=save_metrics
+        )
+
+        if not results:
+            raise RuntimeError("Transcription service returned no results")
+
+        transcription_result = results[0]
+
+        # normalize notes
+
+        # combine meeting notes
+
+        # then send to speaker mapping
+
+        speaker_mapping = {}
+        if identify_speakers and transcription_result.s3_output_uri:
+            # transcript file from s3
+            logger.info(f'output uri: {transcription_result.s3_output_uri}')
+            # load transcript
+            transcript_path = Path(transcription_result.s3_output_uri)
+            with open(transcript_path) as f:
+                transcript_data = json.load(f)
+
+            assigner = SpeakerAssignment()
+            speaker_mapping = assigner.generate_mapping(transcript_data)
+            logger.info(f'speaker_mapping: {speaker_mapping}')
+        
+        duration = time.time() - pipeline_start
+
+        return CompleteMeetingResponseModel(
+            success=True,
+            original_filename=file.filename,
+            s3_uri=s3_uri,
+            processing_metrics=PerformanceMetrics(**audio_processing_metrics),
+            transcription_result=TranscriptionResultModel(**transcription_result.__dict__),
+            speaker_mapping=speaker_mapping,
+            total_pipeline_duration=duration
+        )
+
+    except Exception as e:
+        logger.error(f'Found error during process_meeting: {str(e)}')
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 # TODO: full end to end workflow but need to add in the part where we combine transcripts & notes into a
 # file so we can ingest that for the analysis
