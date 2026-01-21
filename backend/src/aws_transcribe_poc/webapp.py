@@ -45,12 +45,13 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .routers.analysis import router as analysis_router
 from .routers.audio import router as audio_router
 from .routers.meeting import router as meeting_router
 from .routers.notes import router as notes_router
+from .routers.speaker import router as speaker_router
 from .routers.transcript import router as transcript_router
 from .services.input_handler import InputHandler
 from .services.transcribe import TranscriptionService
@@ -70,6 +71,7 @@ app.include_router(audio_router)
 app.include_router(meeting_router)
 app.include_router(notes_router)
 app.include_router(transcript_router)
+app.include_router(speaker_router)
 
 
 class TranscriptionRequestModel(BaseModel):
@@ -134,6 +136,18 @@ class BatchResponseModel(BaseModel):
     total_pipeline_duration: float
     results: list[ResponseModel]  # collect processing metrics for each file
 
+class CompleteMeetingResponseModel(BaseModel):
+    """Response model for complete meeting processing."""
+    
+    success: bool
+    original_filename: str
+    s3_uri: str
+    processing_metrics: PerformanceMetrics
+    transcription_result: TranscriptionResultModel
+    speaker_mapping: dict[str, str] = Field(default_factory=dict)
+    analysis_report: dict | None = None
+    total_pipeline_duration_seconds: float
+    error: str | None = None
 
 class CompleteAnalysisResponseModel(BaseModel):
     """Response model for complete meeting analysis pipeline."""
@@ -345,6 +359,20 @@ async def upload_and_transcribe_batch(
         for tmp_path in tmp_paths:
             if os.path.exists(tmp_path):
                 os.unlink(tmp_path)
+
+
+@app.post("/process_meeting", response_model=CompleteMeetingResponseModel)
+async def process_meeting(
+    file: UploadFile = File(...),
+
+) -> CompleteMeetingResponseModel:
+    """ Complete meeting analysis """
+    # preprocess file using ffmpeg service
+
+    # transcribe using aws service
+
+    # where is that file located? now read it in and generate speaker mapping
+    pass
 
 
 # TODO: full end to end workflow but need to add in the part where we combine transcripts & notes into a
