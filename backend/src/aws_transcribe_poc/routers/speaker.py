@@ -54,7 +54,7 @@ async def _identify_text_based(
     logger.info('Using text based speaker identification')
 
     assigner = SpeakerAssignment()
-    mapping = assigner.generate_mapping(transcript_data=transcript_data, hints=hints)
+    mapping = assigner.generate_mapping(transcript_data=transcript_data, fix_instructions=hints)
 
     return IdentifyResponseModel(
         success=bool(mapping),
