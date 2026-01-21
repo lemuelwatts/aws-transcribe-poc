@@ -61,7 +61,9 @@ class SpeakerAssignment():
         """
         speaker_samples = {}
         
-        segments = transcript_data.get("segments", [])
+        transcript = transcript_data.get("transcript", [])
+
+        segments = transcript.get("segments", [])
 
         for segment in segments:
             speaker = segment.get("speaker")
@@ -76,7 +78,6 @@ class SpeakerAssignment():
 
     # core class functions #
     def generate_mapping(self, transcript_data, fix_instructions: str = None) -> dict[str, str]:
-        
         # extract speaker samples
         speaker_samples = self._build_speaker_samples(transcript_data)
 
@@ -155,48 +156,3 @@ class SpeakerAssignment():
         """
         # invoke LLM with task, transcript, generating mapping
         # return it
-
-
-## usage
-def main():
-    """Test the speaker assignment on a sample transcript."""
-    print("\nTesting Speaker Identification")
-    
-    # Initialize
-    spk_assignment = SpeakerAssignment()
-    
-    # Load test file
-    input_file_path = "output/normalized_transcripts/transcribe-20260106-192528_meeting_AUDIO_ONLY_TEST-20260106192724_normalized_20260112_151039.json"
-    
-    print(f"Loading: {Path(input_file_path).name}")
-    
-    try:
-        with open(input_file_path) as f:
-            transcript_data = json.load(f)
-        
-        print(f"Speakers in transcript: {transcript_data.get('speakers_count', 'unknown')}")
-        
-        # Generate mapping
-        print("\nIdentifying speakers...")
-        mapping = spk_assignment.generate_mapping(transcript_data)
-        
-        # Display results
-        if mapping:
-            print("Generated Mapping:")
-            for label, name in mapping.items():
-                print(f"   {label} -> {name}")
-        else:
-            print("\nNo speakers identified")
-        
-        print("\nDone!\n")
-        
-    except FileNotFoundError:
-        print("Error: File not found: {input_file_path}")
-    except json.JSONDecodeError as e:
-        print("Error: Invalid JSON in file: {e}")
-    except Exception as e:
-        print("Error: {e}")
-
-
-if __name__ == "__main__":
-    main()
