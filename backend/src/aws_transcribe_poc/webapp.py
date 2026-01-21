@@ -49,6 +49,7 @@ from pydantic import BaseModel
 
 from .routers.analysis import router as analysis_router
 from .routers.audio import router as audio_router
+from .routers.ingestion import router as ingestion_router
 from .routers.meeting import router as meeting_router
 from .routers.notes import router as notes_router
 from .routers.transcript import router as transcript_router
@@ -67,6 +68,7 @@ app = FastAPI(
 
 app.include_router(analysis_router)
 app.include_router(audio_router)
+app.include_router(ingestion_router)
 app.include_router(meeting_router)
 app.include_router(notes_router)
 app.include_router(transcript_router)
