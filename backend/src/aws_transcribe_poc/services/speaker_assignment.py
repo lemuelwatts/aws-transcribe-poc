@@ -1,4 +1,5 @@
 import re
+from typing import Optional
 import boto3
 import json
 import logging
@@ -25,22 +26,23 @@ class SpeakerAssignment():
 
     # helper functions #
     def _extract_json(self, text: str) -> str:
-        """Extract JSON from response, removing markdown fences and extra text."""
+        """
+        Extract JSON from response, removing markdown fences and extra text.
+        Sometimes the LLM doesn't respond with pure JSON, it might add
+        markdown, whitespace, newlines, explanation. 
+        """
         if not text:
             return text
         
-        # Case 1: Remove markdown code fences (```json ... ``` or ``` ... ```)
         fence_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
         match = re.search(fence_pattern, text, flags=re.IGNORECASE)
         if match:
             return match.group(1).strip()
         
-        # Case 2: Extract JSON object from surrounding text
         brace_match = re.search(r"(\{[\s\S]*?\})", text)
         if brace_match:
             return brace_match.group(1).strip()
         
-        # Case 3: Return as-is (hope it's clean JSON)
         return text.strip()
 
     def _build_speaker_samples(self, transcript_data: dict) -> dict:
@@ -148,11 +150,55 @@ class SpeakerAssignment():
             logger.error(f'Error building request and invoking model: {str(e)}')
             return {}        
 
-    def verify_mapping(self):
-        task = """
-        Your task is to verify a speaker mapping. You will be given the original transcript with idenitifed speakers AND
-        a dictionary. You need to review it and compare it. Return the string  "True" if the mapping is accurate. Otherwise, if 
-        if this is not accurate, return a list of why it is incorrect.
+    def verify_mapping(self, mapping, transcript_data):
+
+        task = f"""
+        **Task**
+        Your task is to verify if this speaker mapping is accurate.
+
+        **Mapping to verify**
+        {json.dumps(mapping, indent=2)}
+
+        **Transcript Data**
+        {json.dumps(transcript_data, indent=2)}
+
+        **Output**
+        Please only return JSON
+        {{
+            "issues": ["list issues you found, if any"],
+            "suggestions": ["specific suggestions to fix issues stated"]
+        }}
+
+        If no issues found, return {{"issues": [], "suggestions": []}}
         """
-        # invoke LLM with task, transcript, generating mapping
-        # return it
+        try:
+            request_body = {
+                "messages": [{
+                    "role" : "user",
+                    "content": [{"text": task}],
+                }],
+                "inferenceConfig": {
+                    "maxTokens": 400,
+                    "temperature": 0,
+                    "topP": .9 # instead of considering all possible next tokens, only consider tokens whose cumulative probability adds up to topP
+                    # .9 filters out unlikely ones but considers wider range of tokens than lower values
+                }
+            }
+
+            response = self.bedrock_client.invoke_model(
+                modelId=self.model_id,
+                body=json.dumps(request_body)
+            )
+
+            model_response = json.loads(response['body'].read())
+            response_text = model_response['output']['message']['content'][0]['text']
+
+            json_text = self._extract_json(response_text)
+
+            result = json.loads(json_text)
+
+            return result
+
+        except Exception as e:
+            logger.error(f'Error in verifying speaker mapping: {str(e)}')
+            raise

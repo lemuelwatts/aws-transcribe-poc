@@ -54,7 +54,11 @@ async def _identify_text_based(
     logger.info('Using text based speaker identification')
 
     assigner = SpeakerAssignment()
+    # add a retry here passing fix instructions if the verify func returned anything
+    # ie try block for generate_mapping while verify not empty
     mapping = assigner.generate_mapping(transcript_data=transcript_data, fix_instructions=hints)
+    verification_guidance = assigner.verify_mapping(mapping, transcript_data)
+    logger.info(f'verification_guidance is :{verification_guidance}')
 
     return IdentifyResponseModel(
         success=bool(mapping),
