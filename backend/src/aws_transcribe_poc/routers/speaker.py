@@ -22,6 +22,8 @@ class IdentifyResponseModel(BaseModel):
     speaker_mapping: dict[str, str] = Field(
         description="Mapping of speaker labels to names"
     )
+    verification: dict = Field(default_factory=dict)
+    attempts: int = Field(default=1)
 
 @router.post("/identify", response_model=IdentifyResponseModel)
 async def identify_speakers(request: IdentifyRequestModel) -> IdentifyResponseModel:
@@ -56,11 +58,44 @@ async def _identify_text_based(
     assigner = SpeakerAssignment()
     # add a retry here passing fix instructions if the verify func returned anything
     # ie try block for generate_mapping while verify not empty
-    mapping = assigner.generate_mapping(transcript_data=transcript_data, fix_instructions=hints)
-    verification_guidance = assigner.verify_mapping(mapping, transcript_data)
-    logger.info(f'verification_guidance is :{verification_guidance}')
+    max_retries = 2
+    attempt = 0
+
+    mapping = None
+    verification = None
+    retry_hints = hints
+
+    while attempt < max_retries:
+        attempt += 1
+
+        mapping = assigner.generate_mapping(transcript_data=transcript_data, fix_instructions=retry_hints)
+        if not mapping:
+            logger.warning('Empty mapping generated')
+            break
+
+        verification = assigner.verify_mapping(mapping, transcript_data)
+        logger.info(f'verification is :{verification}')
+        
+        issues = verification.get('issues', [])
+        should_retry = verification.get('should_retry', False)
+
+        if not issues or not should_retry:
+            logger.info('No critical issues found')
+            break
+
+        if attempt < max_retries:
+            retry_hints = f"""Previous mapping had these issues: {json.dumps(issues, indent=2)}
+            {hints if hints else ""}
+
+            Please fix these specific issues in the new mapping.
+            """
+            logger.warning(f"Critical issues found, retrying with hints: {issues}")
+        else:
+            logger.warning(f"Max retries reached with issues: {issues}")
 
     return IdentifyResponseModel(
         success=bool(mapping),
-        speaker_mapping=mapping
+        speaker_mapping=mapping or {},
+        verification = verification or {"issues": [], "should_retry": False},
+        attempts=attempt
     )

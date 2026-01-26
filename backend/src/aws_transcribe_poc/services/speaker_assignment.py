@@ -151,54 +151,25 @@ class SpeakerAssignment():
             return {}        
 
     def verify_mapping(self, mapping, transcript_data):
-
-        task = f"""
-        **Task**
-        Your task is to verify if this speaker mapping is accurate.
-
-        **Mapping to verify**
-        {json.dumps(mapping, indent=2)}
-
-        **Transcript Data**
-        {json.dumps(transcript_data, indent=2)}
-
-        **Output**
-        Please only return JSON
-        {{
-            "issues": ["list issues you found, if any"],
-            "suggestions": ["specific suggestions to fix issues stated"]
-        }}
-
-        If no issues found, return {{"issues": [], "suggestions": []}}
-        """
-        try:
-            request_body = {
-                "messages": [{
-                    "role" : "user",
-                    "content": [{"text": task}],
-                }],
-                "inferenceConfig": {
-                    "maxTokens": 400,
-                    "temperature": 0,
-                    "topP": .9 # instead of considering all possible next tokens, only consider tokens whose cumulative probability adds up to topP
-                    # .9 filters out unlikely ones but considers wider range of tokens than lower values
-                }
-            }
-
-            response = self.bedrock_client.invoke_model(
-                modelId=self.model_id,
-                body=json.dumps(request_body)
-            )
-
-            model_response = json.loads(response['body'].read())
-            response_text = model_response['output']['message']['content'][0]['text']
-
-            json_text = self._extract_json(response_text)
-
-            result = json.loads(json_text)
-
-            return result
-
-        except Exception as e:
-            logger.error(f'Error in verifying speaker mapping: {str(e)}')
-            raise
+        """Simple verification to check if missing speakers or duplicate name assignment."""
+        issues = []
+        
+        # check for duplicates
+        names = list(mapping.values())
+        duplicates = [name for name in names if names.count(name) > 1]
+        if duplicates:
+            issues.append(f"Duplicate names: {set(duplicates)}")
+        
+        # check for missing names
+        transcript = transcript_data.get("transcript", {})
+        segments = transcript.get("segments", [])
+        actual_speakers = set(seg.get("speaker") for seg in segments)
+        mapped_speakers = set(mapping.keys())
+        missing = actual_speakers - mapped_speakers
+        if missing:
+            issues.append(f"Missing speakers: {missing}")
+        
+        return {
+            "issues": issues,
+            "should_retry": len(issues) > 0
+        }

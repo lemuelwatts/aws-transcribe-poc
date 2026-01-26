@@ -38,10 +38,13 @@ import os
 import tempfile
 import time
 from pathlib import Path
-
-from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from fastapi import BackgroundTasks
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+
+from ..services.ffmpeg_handler import FfmpegHandler
 from ..services.input_handler import InputHandler
 
 logger = logging.getLogger(__name__)
@@ -71,6 +74,64 @@ class AudioProcessResponse(BaseModel):
     message: str = "Audio Processed Successfully"
     metrics: PerformanceMetrics
 
+
+def cleanup_file(file_path: str):
+    """Background task to delete a file"""
+    try:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
+            logger.info(f"Cleaned up temporary file: {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to cleanup {file_path}: {e}")
+
+@router.post("/convert-to-wav")
+async def convert_to_wav(    
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...)
+):
+    """Convert uploaded audio/video file to WAV format and return it."""
+    input_tmp_path = None
+    output_wav_path = None
+    
+    try:
+        # Step 1: Save uploaded file to temporary location
+        with tempfile.NamedTemporaryFile(
+            delete=False, 
+            suffix=Path(file.filename).suffix
+        ) as tmp_input:
+            content = await file.read()
+            tmp_input.write(content)
+            input_tmp_path = tmp_input.name
+        
+        # Step 2: Use existing FfmpegHandler to convert
+        handler = FfmpegHandler()
+        output_wav_path, metrics = handler.convert_to_wav(input_tmp_path)
+        
+        logger.info(
+            f"Converted {file.filename} to WAV successfully. "
+            f"Conversion took {metrics['ffmpeg_conversion_time_seconds']}s"
+        )
+        
+        # Step 3: Schedule cleanup after response is sent
+        background_tasks.add_task(cleanup_file, input_tmp_path)
+        background_tasks.add_task(cleanup_file, output_wav_path)
+        
+        # Step 4: Return the converted file
+        return FileResponse(
+            path=output_wav_path,
+            media_type="audio/wav",
+            filename=f"{Path(file.filename).stem}.wav"
+        )
+    
+    except Exception as e:
+        # Clean up immediately on error
+        if input_tmp_path and os.path.exists(input_tmp_path):
+            os.unlink(input_tmp_path)
+        if output_wav_path and os.path.exists(output_wav_path):
+            os.unlink(output_wav_path)
+        
+        logger.error(f'Conversion failed: {str(e)}')
+        raise HTTPException(status_code=500, detail=f"Conversion failed: {str(e)}")
 
 @router.post("/process", response_model=AudioProcessResponse)
 async def process_audio(file: UploadFile = File(...)) -> AudioProcessResponse:

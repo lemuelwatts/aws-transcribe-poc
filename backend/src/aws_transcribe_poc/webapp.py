@@ -462,4 +462,4 @@ async def upload_and_generate_notes(
 
 def start_app() -> None:
     """Start the FastAPI webapp."""
-    uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104
+    uvicorn.run(app, host="0.0.0.0", port=8888)  # noqa: S104
