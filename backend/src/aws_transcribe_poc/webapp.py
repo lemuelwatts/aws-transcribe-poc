@@ -37,6 +37,7 @@ This module configures the FastAPI Web Server that provides HTTP/API access
 to the rest of the "backend".
 """
 
+import json
 import logging
 import os
 import tempfile
@@ -45,16 +46,22 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .routers.analysis import router as analysis_router
 from .routers.audio import router as audio_router
 from .routers.ingestion import router as ingestion_router
 from .routers.meeting import router as meeting_router
 from .routers.notes import router as notes_router
+from .routers.speaker import router as speaker_router
 from .routers.transcript import router as transcript_router
+from .services.analyzer import AnalyzerService
 from .services.input_handler import InputHandler
+from .services.meeting_combiner import MeetingCombiner
+from .services.notes_normalizer import NotesNormalizer
+from .services.speaker_assignment import SpeakerAssignment
 from .services.transcribe import TranscriptionService
+from .services.transcript_normalizer import TranscriptNormalizer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -72,6 +79,7 @@ app.include_router(ingestion_router)
 app.include_router(meeting_router)
 app.include_router(notes_router)
 app.include_router(transcript_router)
+app.include_router(speaker_router)
 
 
 class TranscriptionRequestModel(BaseModel):
@@ -135,6 +143,20 @@ class BatchResponseModel(BaseModel):
     failed: int
     total_pipeline_duration: float
     results: list[ResponseModel]  # collect processing metrics for each file
+
+
+class CompleteMeetingResponseModel(BaseModel):
+    """Response model for complete meeting processing."""
+
+    success: bool
+    original_filename: str
+    s3_uri: str
+    processing_metrics: PerformanceMetrics
+    transcription_result: TranscriptionResultModel
+    speaker_mapping: dict[str, str] = Field(default_factory=dict)
+    analysis_report: dict | None = None
+    total_pipeline_duration_seconds: float
+    error: str | None = None
 
 
 class CompleteAnalysisResponseModel(BaseModel):
@@ -349,11 +371,87 @@ async def upload_and_transcribe_batch(
                 os.unlink(tmp_path)
 
 
-# TODO: full end to end workflow but need to add in the part where we combine transcripts & notes into a
-# file so we can ingest that for the analysis
+@app.post("/process_meeting", response_model=CompleteMeetingResponseModel)
+async def process_meeting(
+    file: UploadFile = File(...),
+    identify_speakers: bool = True,
+    save_metrics: bool = False,
+) -> CompleteMeetingResponseModel:
+    """Complete meeting analysis"""
+    # preprocess file using ffmpeg service
+    pipeline_start = time.time()
+
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(file.filename).suffix
+    ) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        handler = InputHandler()
+        s3_uri, audio_processing_metrics = handler.process_input(
+            tmp_path, file.filename
+        )
+
+        transcription_service = TranscriptionService()
+        results = transcription_service.transcribe_all(
+            [s3_uri], save_metrics=save_metrics
+        )
+
+        if not results:
+            raise RuntimeError("Transcription service returned no results")
+
+        transcription_result = results[0]
+
+        # normalize notes
+
+        # combine meeting notes
+
+        # then send to speaker mapping
+
+        speaker_mapping = {}
+        if identify_speakers and transcription_result.s3_output_uri:
+            # transcript file from s3
+            logger.info(f"output uri: {transcription_result.s3_output_uri}")
+            # load transcript
+            transcript_path = Path(transcription_result.s3_output_uri)
+            with open(transcript_path) as f:
+                transcript_data = json.load(f)
+
+            assigner = SpeakerAssignment()
+            speaker_mapping = assigner.generate_mapping(transcript_data)
+            logger.info(f"speaker_mapping: {speaker_mapping}")
+
+        duration = time.time() - pipeline_start
+
+        return CompleteMeetingResponseModel(
+            success=True,
+            original_filename=file.filename,
+            s3_uri=s3_uri,
+            processing_metrics=PerformanceMetrics(**audio_processing_metrics),
+            transcription_result=TranscriptionResultModel(
+                **transcription_result.__dict__
+            ),
+            speaker_mapping=speaker_mapping,
+            total_pipeline_duration=duration,
+        )
+
+    except Exception as e:
+        logger.error(f"Found error during process_meeting: {e!s}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
 @app.post("/upload_and_generate_notes", response_model=CompleteAnalysisResponseModel)
 async def upload_and_generate_notes(
-    file: UploadFile = File(...), save_report: bool = True, save_metrics: bool = False
+    file: UploadFile = File(...),
+    notes_file: UploadFile | None = File(None),
+    save_report: bool = True,
+    save_metrics: bool = False,
 ) -> CompleteAnalysisResponseModel:
     """Complete pipeline: upload, process, transcribe, and generate meeting analysis.
 
@@ -361,19 +459,146 @@ async def upload_and_generate_notes(
     1. Upload and process audio/video file
     2. Convert to WAV and upload to S3
     3. Transcribe using AWS Transcribe
-    4. Combines transcription results and user notes
-    5. Generate meeting notes (summary, action items, insights)
+    4. Normalize transcription results
+    5. Normalize user notes (if provided)
+    6. Combine transcript and notes
+    7. Generate meeting analysis (summary, action items, insights)
 
     Args:
         file: Audio or video file to process
+        notes_file: Optional text file with meeting notes organized by attendee
         save_report: Whether to save analysis report to output/ folder (default: True)
         save_metrics: Whether to save processing metrics to S3 (default: False)
 
     Returns:
         Complete analysis results with transcription and meeting insights
     """
+    pipeline_start = time.time()
+
+    # Save uploaded audio file to temp location
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=Path(file.filename).suffix
+    ) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        handler = InputHandler()
+        s3_uri, audio_processing_metrics = handler.process_input(
+            tmp_path, file.filename
+        )
+
+        transcription_service = TranscriptionService()
+        results = transcription_service.transcribe_all(
+            [s3_uri], save_metrics=save_metrics
+        )
+
+        if not results:
+            raise RuntimeError("Transcription service returned no results")
+
+        transcription_result = results[0]
+
+        if not transcription_result.success:
+            raise RuntimeError(f"Transcription failed: {transcription_result.error}")
+
+        transcript_path = Path(transcription_result.s3_output_uri)
+        with open(transcript_path) as f:
+            raw_transcript = json.load(f)
+
+        normalizer = TranscriptNormalizer()
+        normalized_transcript = normalizer.normalize(raw_transcript)
+
+        normalized_notes = None
+        if notes_file:
+            notes_content = await notes_file.read()
+            notes_text = notes_content.decode("utf-8")
+            notes_normalizer = NotesNormalizer()
+            normalized_notes = notes_normalizer.normalize(notes_text)
+
+        combiner = MeetingCombiner()
+
+        if normalized_notes:
+            combined_meeting = combiner.combine(
+                normalized_transcript.to_dict(), normalized_notes.to_dict()
+            )
+        else:
+            # If no notes provided, create empty notes structure
+            combined_meeting = combiner.combine(
+                normalized_transcript.to_dict(), {"attendee_notes": {}}
+            )
+
+        # Save combined meeting to temp file for analyzer
+        combined_file_path = Path("output") / f"combined_{transcript_path.stem}.json"
+        combined_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(combined_file_path, "w") as f:
+            json.dump(combined_meeting.to_dict(), f, indent=2)
+
+        analyzer = AnalyzerService(input_file=str(combined_file_path))
+        analysis_report, output_path = analyzer.run_analysis(save_report=save_report)
+
+        # Convert analysis report to dict for response
+        analysis_dict = analysis_report.model_dump()
+
+        duration = time.time() - pipeline_start
+
+        return CompleteAnalysisResponseModel(
+            success=True,
+            original_filename=file.filename,
+            s3_uri=s3_uri,
+            processing_metrics=PerformanceMetrics(**audio_processing_metrics),
+            transcription_result=TranscriptionResultModel(
+                **transcription_result.__dict__
+            ),
+            analysis_report=analysis_dict,
+            analysis_output_path=output_path,
+            total_pipeline_duration_seconds=duration,
+        )
+
+    except Exception as e:
+        logger.error(f"Error during upload_and_generate_notes: {e!s}")
+        duration = time.time() - pipeline_start
+
+        return CompleteAnalysisResponseModel(
+            success=False,
+            original_filename=file.filename,
+            s3_uri="",
+            processing_metrics=PerformanceMetrics(
+                total_processing_time_seconds=0,
+                input_metadata={},
+                ffmpeg_conversion_time_seconds=0,
+                s3_upload_time_seconds=0,
+                s3_upload_speed_mbps=0,
+                input_file_size_mb=0,
+                output_file_size_mb=0,
+                size_reduction_percent=0,
+            ),
+            transcription_result=TranscriptionResultModel(
+                s3_uri="",
+                success=False,
+                error=str(e),
+            ),
+            analysis_report=None,
+            analysis_output_path=None,
+            total_pipeline_duration_seconds=duration,
+            error=str(e),
+        )
+
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+# TODO: implement new endpoint to replace all others; don't need multiple endpoints repeating functionality
+# complete end to end endpoint that has parameters to customize what functionality is run
+# speakerID? use biometrics or LLM?
+# generate notes? which ones?
+# upload one or many files
+# save report?
+# save metrics?
 
 
 def start_app() -> None:
     """Start the FastAPI webapp."""
-    uvicorn.run(app, host="0.0.0.0", port=8000)  # noqa: S104
+    uvicorn.run(app, host="0.0.0.0", port=8888)  # noqa: S104

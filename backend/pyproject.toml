@@ -45,7 +45,12 @@ dependencies = [
     "behave>=1.2.6",
     "boto3>=1.35.0",
     "ffmpeg-python>=0.2.0",
+    "speechbrain>=1.0.0",
+    "torchaudio>=2.0.0",
     "python-docx>=1.1.0",
+    "scipy>=1.17.0",
+    "huggingface-hub>=0.20.0,<1.0.0",
+    "soundfile>=0.12.1",
 ]
 
 [project.scripts]
