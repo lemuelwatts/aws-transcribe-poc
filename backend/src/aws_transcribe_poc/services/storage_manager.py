@@ -94,7 +94,7 @@ class StorageManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to save speaker '{speaker_id}': '{str(e)}'")
+            logger.error(f"Failed to save speaker '{speaker_id}': '{e!s}'")
             return False
 
     def load_speaker(self, speaker_id: str) -> dict | None:

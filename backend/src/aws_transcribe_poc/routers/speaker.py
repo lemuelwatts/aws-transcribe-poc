@@ -31,10 +31,11 @@
 # or program will be met for the duration of any applicable contract under which
 # the code or program is provided.
 
-from datetime import datetime
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
+import tempfile
 
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
@@ -43,6 +44,7 @@ from ..services.ffmpeg_handler import FfmpegHandler
 from ..services.speaker_assignment import SpeakerAssignment
 from ..services.speaker_identification import SpeakerIdentification
 from ..services.storage_manager import StorageManager
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/speakers", tags=["speakers"])
@@ -189,18 +191,15 @@ async def register_voiceprint(
                 raise ValueError("Metadata must be a JSON object")
         except (json.JSONDecodeError, ValueError) as e:
             return RegisterVoiceprintResponse(
-                success=False,
-                name=name,
-                message=f"Invalid metadata: {str(e)}"
+                success=False, name=name, message=f"Invalid metadata: {e!s}"
             )
-        
-        temp_dir = Path("/tmp/voiceprints")
-        temp_dir.mkdir(exist_ok=True)
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="voiceprints_"))
         temp_file = temp_dir / file.filename
-        
+
         with open(temp_file, "wb") as f:
             f.write(await file.read())
-        
+
         if temp_file.suffix.lower() == ".wav":
             wav_file = temp_file
             logger.info(f"File is already WAV format: {wav_file}")
@@ -222,28 +221,21 @@ async def register_voiceprint(
 
         storage_mgr = StorageManager()
         success = storage_mgr.save_speaker(
-            speaker_id=name, 
-            embedding=embedding, 
-            metadata=speaker_metadata
+            speaker_id=name, embedding=embedding, metadata=speaker_metadata
         )
-        
+
         message = (
-            f"Successfully registered voiceprint for {name}" if success 
+            f"Successfully registered voiceprint for {name}"
+            if success
             else f"Failed to save voiceprint for {name}"
         )
-        
-        return RegisterVoiceprintResponse(
-            success=success,
-            name=name,
-            message=message
-        )
-        
+
+        return RegisterVoiceprintResponse(success=success, name=name, message=message)
+
     except Exception as e:
         logger.error(f"Error registering voiceprint: {e}")
         return RegisterVoiceprintResponse(
-            success=False,
-            name=name,
-            message=f"Error: {str(e)}"
+            success=False, name=name, message=f"Error: {e!s}"
         )
     finally:
         if temp_file and temp_file.exists():
@@ -251,28 +243,24 @@ async def register_voiceprint(
                 temp_file.unlink()
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
-        
+
         if wav_file and wav_file.exists() and wav_file != temp_file:
             try:
                 wav_file.unlink()
             except Exception as e:
-                logger.warning(f"Failed to cleanup WAV file {wav_file}: {e}")        
+                logger.warning(f"Failed to cleanup WAV file {wav_file}: {e}")
 
 
 @router.post("/identify-by-voiceprint", response_model=IdentifyResponse)
-async def identify_by_voiceprint(
-    file: UploadFile = File(...), 
-    threshold: float = 0.85
-):
+async def identify_by_voiceprint(file: UploadFile = File(...), threshold: float = 0.85):
     """Identify a speaker from an audio sample"""
     temp_file = None
     wav_file = None
-    
+
     try:
-        temp_dir = Path("/tmp/voiceprints")
-        temp_dir.mkdir(exist_ok=True, parents=True)
+        temp_dir = Path(tempfile.mkdtemp(prefix="voiceprints_"))
         temp_file = temp_dir / file.filename
-        
+
         with open(temp_file, "wb") as f:
             f.write(await file.read())
 
@@ -281,45 +269,36 @@ async def identify_by_voiceprint(
         else:
             ffmpeg = FfmpegHandler()
             wav_filename, _ = ffmpeg.convert_to_wav(
-                str(temp_file),
-                output_dir=str(temp_dir)
+                str(temp_file), output_dir=str(temp_dir)
             )
             wav_file = Path(wav_filename)
-        
+
         storage_mgr = StorageManager()
         stored_embeddings = storage_mgr.get_all_embeddings()
-        
+
         if not stored_embeddings:
-            return IdentifyResponse(
-                matched_speaker=None,
-                confidence=None
-            )
-        
+            return IdentifyResponse(matched_speaker=None, confidence=None)
+
         speaker_id_service = SpeakerIdentification()
         matched_name, similarity = speaker_id_service.find_match(
-            str(wav_file),
-            stored_embeddings,
-            threshold
+            str(wav_file), stored_embeddings, threshold
         )
-        
+
         return IdentifyResponse(
             matched_speaker=matched_name,
-            confidence=float(similarity) if similarity else None
+            confidence=float(similarity) if similarity else None,
         )
-        
+
     except Exception as e:
         logger.exception(f"Error identifying voiceprint: {e}")
-        return IdentifyResponse(
-            matched_speaker=None,
-            confidence=None
-        )
+        return IdentifyResponse(matched_speaker=None, confidence=None)
     finally:
         if temp_file and temp_file.exists():
             try:
                 temp_file.unlink()
             except Exception as e:
                 logger.warning(f"Failed to cleanup {temp_file}: {e}")
-        
+
         if wav_file and wav_file.exists() and wav_file != temp_file:
             try:
                 wav_file.unlink()
@@ -334,7 +313,7 @@ async def get_voiceprints():
         storage_manager = StorageManager()
         speakers = storage_manager.list_speakers()
         return VoiceprintsResponse(speakers=speakers)
-        
+
     except Exception as e:
         logger.exception(f"Error listing voiceprints: {e}")
         return VoiceprintsResponse(speakers=[])
@@ -346,9 +325,9 @@ async def delete_voiceprint(name: str):
     try:
         storage_manager = StorageManager()
         success = storage_manager.delete_speaker(name)
-        
+
         return DeleteResponse(success=success, name=name)
-        
+
     except Exception as e:
         logger.exception(f"Error deleting voiceprint '{name}': {e}")
         return DeleteResponse(success=False, name=name)
