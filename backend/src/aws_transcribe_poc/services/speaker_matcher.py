@@ -106,7 +106,7 @@ class SpeakerMatcher:
     def _match_llm(self, normalized: NormalizedTranscript) -> SpeakerMatchResult:
         """Infer speaker names from transcript context using LLM."""
         # Get LLM inference
-        llm_mapping = self.speaker_assign.generate_mapping(normalized)
+        llm_mapping = self.speaker_assign.generate_mapping(normalized.to_dict())
 
         # Build result
         result = SpeakerMatchResult()
