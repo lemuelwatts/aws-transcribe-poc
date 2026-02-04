@@ -63,7 +63,6 @@ from .routers.transcript import router as transcript_router
 from .services.analyzer import AnalyzerService
 from .services.input_handler import InputHandler
 from .services.meeting_combiner import MeetingCombiner
-from .services.notes_normalizer import NotesNormalizer
 from .services.s3_handler import S3Handler
 from .services.speaker_matcher import SpeakerMatcher
 from .services.transcribe import TranscriptionService
@@ -88,6 +87,54 @@ app.include_router(transcript_router)
 app.include_router(speaker_router)
 
 
+def _parse_note_names(note_names: str | None) -> list[str]:
+    """Parse optional JSON array of display names for notes files."""
+    if not note_names or not note_names.strip():
+        return []
+    try:
+        parsed = json.loads(note_names)
+        if not isinstance(parsed, list):
+            return []
+        return [str(x).strip() or "" for x in parsed]
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+async def _build_notes_dict(
+    notes: list[UploadFile], note_names: str | None
+) -> dict:
+    """Build attendee_notes dict from multiple notes files with optional names.
+
+    Each file is keyed by the corresponding entry in note_names (or filename stem).
+    If the same name appears for multiple files, their content is merged.
+    """
+    if not notes:
+        return {"attendee_notes": {}}
+
+    names = _parse_note_names(note_names)
+    merged: dict[str, str] = {}
+
+    for i, note_file in enumerate(notes):
+        name = (
+            names[i].strip()
+            if i < len(names) and names[i]
+            else (Path(note_file.filename or "notes").stem or "unknown")
+        )
+        if not name:
+            name = "unknown"
+        content = (await note_file.read()).decode("utf-8").strip()
+        if name in merged:
+            merged[name] = f"{merged[name]}\n\n{content}"
+        else:
+            merged[name] = content
+
+    return {
+        "attendee_notes": {
+            n: {"raw_notes": text} for n, text in merged.items()
+        }
+    }
+
+
 @app.get("/")
 async def health():
     """Health check endpoint."""
@@ -97,8 +144,12 @@ async def health():
 @app.post("/process_meeting", response_model=MeetingResponse)
 async def process_meeting(
     file: UploadFile = File(..., description="Meeting audio/video file"),
-    notes_file: UploadFile | None = File(
-        None, description="Optional meeting notes text file"
+    notes: list[UploadFile] = File(
+        default=[], description="Optional meeting notes text files (one or more)"
+    ),
+    note_names: str | None = Form(
+        default=None,
+        description='Optional JSON array of display names for each notes file, e.g. ["Sarah", "Jake"]. If omitted, filename (without extension) is used.',
     ),
     speaker_method: SpeakerMethod = Form(
         SpeakerMethod.HYBRID, description="Speaker identification method"
@@ -173,13 +224,8 @@ async def process_meeting(
                 normalized, speaker_result.mapping
             )
 
-        # Combine with notes if provided
-        if notes_file:
-            notes_text = (await notes_file.read()).decode("utf-8")
-            normalized_notes = NotesNormalizer().normalize(notes_text)
-            notes_dict = normalized_notes.to_dict()
-        else:
-            notes_dict = {"attendee_notes": {}}
+        # Combine with notes if provided (multiple files, optional name per file)
+        notes_dict = await _build_notes_dict(notes, note_names)
 
         combined = MeetingCombiner().combine(normalized.to_dict(), notes_dict)
 

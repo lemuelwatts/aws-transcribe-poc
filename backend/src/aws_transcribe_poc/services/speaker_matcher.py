@@ -199,17 +199,17 @@ class SpeakerMatcher:
         return result
 
     def _match_hybrid(
-        self, audio_path: str, raw_transcript: dict, threshold: float
+        self, audio_path: str, normalized_transcript: NormalizedTranscript, threshold: float
     ) -> SpeakerMatchResult:
         """Run both biometric and LLM, prefer biometric with LLM fallback."""
 
-        bio_result = self._match_biometric(audio_path, raw_transcript, threshold)
+        bio_result = self._match_biometric(audio_path, normalized_transcript, threshold)
 
-        llm_result = self._match_llm(raw_transcript)
+        llm_result = self._match_llm(normalized_transcript)
 
         # Merge: biometric preferred, LLM fills gaps
         result = SpeakerMatchResult()
-        expected_speakers = self._extract_speakers(raw_transcript)
+        expected_speakers = self._extract_speakers(normalized_transcript)
 
         for label in expected_speakers:
             if label in bio_result.mapping:
