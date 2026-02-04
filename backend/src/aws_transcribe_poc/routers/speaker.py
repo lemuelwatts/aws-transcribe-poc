@@ -33,9 +33,9 @@
 
 import json
 import logging
+import tempfile
 from datetime import datetime
 from pathlib import Path
-import tempfile
 
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
@@ -181,9 +181,29 @@ class DeleteResponse(BaseModel):
 async def register_voiceprint(
     name: str,
     file: UploadFile = File(...),
+    full_name: str | None = None,
     metadata: str = "{}",
 ):
-    """Register a speaker's voiceprint"""
+    """Register a speaker's voiceprint for biometric identification.
+
+    Args:
+        name: Short identifier for the speaker (used as storage key)
+        file: Audio file containing the speaker's voice sample
+        full_name: Optional full name (e.g., "John Adams"). If provided, this
+            will be used when replacing speaker labels in transcripts. This is
+            important for accurate meeting analysis - without it, the transcript
+            will use the short name instead.
+        metadata: Optional JSON string with additional metadata
+
+    Example:
+        Register with full name for best transcript integration:
+        - name: "nick"
+        - full_name: "John Adams"
+        - file: john_voice_sample.wav
+
+    Returns:
+        RegisterVoiceprintResponse with success status and message
+    """
     try:
         try:
             metadata_dict = json.loads(metadata)
@@ -217,6 +237,11 @@ async def register_voiceprint(
             "date": datetime.now().isoformat(),
             "audio_file_path": str(wav_file),
         }
+
+        # Add full_name to metadata if provided
+        if full_name:
+            speaker_metadata["full_name"] = full_name
+
         speaker_metadata.update(metadata_dict)
 
         storage_mgr = StorageManager()
@@ -226,6 +251,7 @@ async def register_voiceprint(
 
         message = (
             f"Successfully registered voiceprint for {name}"
+            + (f" (full name: {full_name})" if full_name else "")
             if success
             else f"Failed to save voiceprint for {name}"
         )
@@ -252,7 +278,7 @@ async def register_voiceprint(
 
 
 @router.post("/identify-by-voiceprint", response_model=IdentifyResponse)
-async def identify_by_voiceprint(file: UploadFile = File(...), threshold: float = 0.85):
+async def identify_by_voiceprint(file: UploadFile = File(...), threshold: float = 0.5):
     """Identify a speaker from an audio sample"""
     temp_file = None
     wav_file = None

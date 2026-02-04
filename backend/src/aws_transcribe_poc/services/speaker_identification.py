@@ -62,7 +62,7 @@ class SpeakerIdentification:
                 source="speechbrain/spkrec-ecapa-voxceleb",
                 savedir=str(model_path),  # then store it locally
             )
-        self.default_threshold = 0.85
+        self.default_threshold = 0.5
 
     def generate_embedding(self, audio_path: str) -> np.ndarray:
         """Extract speaker embedding from an audio file."""
@@ -89,14 +89,14 @@ class SpeakerIdentification:
             raise
 
     def compare_speakers(
-        self, embedding1: np.ndarray, embedding2: np.ndarray, threshold: float = 0.85
+        self, embedding1: np.ndarray, embedding2: np.ndarray, threshold: float = 0.5
     ) -> tuple[float, bool]:
         """Compare two speaker embeddings to determine if they're the same speaker.
 
         Args:
             embedding1: First speaker embedding
             embedding2: Second speaker embedding
-            threshold: Similarity threshold (default: 0.85)
+            threshold: Similarity threshold (default: 0.5)
 
         Returns:
             True if speakers are considered the same (similarity >= threshold)

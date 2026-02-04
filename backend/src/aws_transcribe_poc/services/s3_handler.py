@@ -31,6 +31,7 @@
 # or program will be met for the duration of any applicable contract under which
 # the code or program is provided.
 
+import json
 import logging
 import os
 import re
@@ -113,44 +114,50 @@ class S3Handler:
             logger.error(f"Error in s3 upload. file: {file_path}. error: {e!s}")
             raise RuntimeError(f"Failed to upload to s3: {e!s}")
 
-    def upload_file_to_path(self, file_path: str, s3_key: str) -> tuple[str, dict]:
-        """Upload a file to a specific S3 key path.
+    def _parse_s3_uri(self, s3_uri: str) -> tuple[str, str]:
+        """Parse S3 URI into bucket and key.
 
         Args:
-            file_path: Local path to the file to upload
-            s3_key: The full S3 key (path) to upload the file to
+            s3_uri: S3 URI like s3://bucket/path/to/file
 
         Returns:
-            Tuple of (s3_uri, metrics_dict)
+            Tuple of (bucket_name, key)
+
+        Raises:
+            ValueError: If S3 URI format is invalid
+        """
+        if not s3_uri.startswith("s3://"):
+            raise ValueError(f"Invalid S3 URI: {s3_uri}")
+
+        parts = s3_uri[5:].split("/", 1)
+        if len(parts) != 2:
+            raise ValueError(f"Invalid S3 URI format: {s3_uri}")
+
+        return parts[0], parts[1]
+
+    def download_json(self, s3_uri: str) -> dict:
+        """Download and parse JSON from S3.
+
+        Args:
+            s3_uri: Full S3 URI (s3://bucket/key)
+
+        Returns:
+            Parsed JSON as dictionary
+
+        Raises:
+            ValueError: If S3 URI is invalid
+            RuntimeError: If download or parsing fails
         """
         try:
-            file_size_bytes = os.path.getsize(file_path)
-            file_size_mb = file_size_bytes / (1024 * 1024)
+            bucket, key = self._parse_s3_uri(s3_uri)
+            logger.info(f"Downloading JSON from s3://{bucket}/{key}")
 
-            logger.info(f"uploading {file_path} to s3://{self.bucket_name}/{s3_key}")
+            response = self.s3_client.get_object(Bucket=bucket, Key=key)
+            json_data = json.loads(response["Body"].read().decode("utf-8"))
 
-            upload_start = time.time()
-            self.s3_client.upload_file(file_path, self.bucket_name, s3_key)
-            upload_duration = time.time() - upload_start
-
-            upload_speed_mbps = (
-                file_size_mb / upload_duration if upload_duration > 0 else 0
-            )
-
-            s3_uri = f"s3://{self.bucket_name}/{s3_key}"
-
-            metrics = {
-                "s3_upload_time_seconds": round(upload_duration, 3),
-                "s3_upload_speed_mbps": round(upload_speed_mbps, 2),
-                "file_size_bytes": file_size_bytes,
-                "file_size_mb": round(file_size_mb, 2),
-            }
-
-            logger.info(
-                f"Upload successful: {s3_uri} ({upload_duration:.2f}s @ {upload_speed_mbps:.2f} MB/s)"
-            )
-            return s3_uri, metrics
+            logger.info(f"Successfully downloaded and parsed JSON from {s3_uri}")
+            return json_data
 
         except Exception as e:
-            logger.error(f"Error in s3 upload. file: {file_path}. error: {e!s}")
-            raise RuntimeError(f"Failed to upload to s3: {e!s}")
+            logger.error(f"Error downloading JSON from {s3_uri}: {e!s}")
+            raise RuntimeError(f"Failed to download JSON from S3: {e!s}")

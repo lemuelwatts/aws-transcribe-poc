@@ -172,3 +172,16 @@ class StorageManager:
                 embeddings[speaker_id] = speaker_data["embedding"]
 
         return embeddings
+
+    def get_all_speakers(self) -> dict[str, dict]:
+        """Load all speaker embeddings with metadata.
+
+        Returns:
+            Dictionary mapping speaker_id to {embedding, metadata}
+        """
+        speakers = {}
+        for speaker_id in self.list_speakers():
+            speaker_data = self.load_speaker(speaker_id)
+            if speaker_data:
+                speakers[speaker_id] = speaker_data
+        return speakers
