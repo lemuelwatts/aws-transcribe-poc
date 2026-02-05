@@ -102,3 +102,38 @@ class FfmpegHandler:
     def probe_file(self, file_path: str) -> dict:
         """Use ffmpeg probe to get metadata"""
         return ffmpeg.probe(file_path)
+
+    def extract_segment(
+        self, input_file: str, start_time: float, end_time: float, output_file: str
+    ) -> str:
+        """Extract an audio segment from a file based on timestamps.
+
+        Args:
+            input_file: Path to input audio/video file
+            start_time: Start time in seconds
+            end_time: End time in seconds
+            output_file: Path for output WAV file
+
+        Returns:
+            Path to the extracted audio segment
+        """
+        try:
+            duration = end_time - start_time
+            logger.info(
+                f"Extracting segment from {input_file}: "
+                f"{start_time:.2f}s - {end_time:.2f}s (duration: {duration:.2f}s)"
+            )
+
+            ffmpeg.input(input_file, ss=start_time, t=duration).output(
+                output_file,
+                ar=16000,  # 16kHz sample rate for speaker recognition
+                ac=1,  # mono channel
+                acodec="pcm_s16le",  # 16-bit PCM
+            ).run(overwrite_output=True, quiet=True)
+
+            logger.info(f"Segment extracted to: {output_file}")
+            return output_file
+
+        except Exception as e:
+            logger.error(f"Failed to extract segment: {e!s}")
+            raise RuntimeError(f"FFmpeg segment extraction failed: {e!s}")

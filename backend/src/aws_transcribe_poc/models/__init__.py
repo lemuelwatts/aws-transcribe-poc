@@ -31,9 +31,20 @@
 # or program will be met for the duration of any applicable contract under which
 # the code or program is provided.
 
-"""Services package for AWS Transcribe POC."""
+"""API models package."""
 
-from .speaker_matcher import SpeakerMatcher
-from .transcribe import TranscriptionService
+from .api_models import (
+    MeetingResponse,
+    ProcessingMetrics,
+    SpeakerMatch,
+    SpeakerMethod,
+    TranscriptionResult,
+)
 
-__all__ = ["SpeakerMatcher", "TranscriptionService"]
+__all__ = [
+    "MeetingResponse",
+    "ProcessingMetrics",
+    "SpeakerMatch",
+    "SpeakerMethod",
+    "TranscriptionResult",
+]

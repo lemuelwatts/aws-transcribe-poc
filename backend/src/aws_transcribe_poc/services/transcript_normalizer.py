@@ -202,3 +202,46 @@ class TranscriptNormalizer:
             speakers_count=speakers_count,
             segments=segments,
         )
+
+    def replace_speaker_labels(
+        self,
+        normalized: NormalizedTranscript,
+        mapping: dict[str, str],
+    ) -> NormalizedTranscript:
+        """Replace speaker labels with actual names in a normalized transcript.
+
+        Creates a new NormalizedTranscript with speaker labels (e.g., spk_0)
+        replaced by actual names (e.g., John Adams) based on the mapping.
+        Labels not in the mapping are kept as-is.
+
+        Args:
+            normalized: The normalized transcript with speaker labels
+            mapping: Dict mapping labels (spk_0) to names (John Adams)
+
+        Returns:
+            New NormalizedTranscript with names instead of labels
+        """
+        new_segments = []
+        for seg in normalized.segments:
+            # Use mapped name if available, otherwise keep original label
+            speaker_name = mapping.get(seg.speaker, seg.speaker)
+            new_segments.append(
+                SpeakerSegment(
+                    speaker=speaker_name,
+                    start_time=seg.start_time,
+                    end_time=seg.end_time,
+                    text=seg.text,
+                )
+            )
+
+        replaced_count = sum(1 for seg in normalized.segments if seg.speaker in mapping)
+        logger.info(
+            f"Replaced speaker labels in '{normalized.job_name}': "
+            f"{replaced_count}/{len(normalized.segments)} segments updated"
+        )
+
+        return NormalizedTranscript(
+            job_name=normalized.job_name,
+            speakers_count=normalized.speakers_count,
+            segments=new_segments,
+        )
